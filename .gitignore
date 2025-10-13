@@ -1,0 +1,53 @@
+# 二进制文件和临时文件
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# 测试生成的覆盖率文件
+*.out
+*.test
+
+# Go编译产生的临时文件
+*.[568vq]
+[568vq].out
+
+# Go的依赖包目录
+# 通常我们通过 go.mod 管理依赖，所以不需要将vendor目录提交
+/vendor/
+
+# 操作系统和IDE生成的文件
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# Windows thumbnail cache
+Thumbs.db
+
+# JetBrains IDEs (GoLand)
+.idea/
+
+# VS Code
+.vscode/
+
+# 日志文件和环境配置文件
+# Log files
+*.log
+
+# Environment variables
+.env
+.env.*
+!/.env.example
+
+# 笔记和草稿
+*.mo
+
+# 临时测试数据
+*.csv
+*.txt
