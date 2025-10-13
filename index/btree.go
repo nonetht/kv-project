@@ -14,6 +14,14 @@ type BTree struct {
 	lock *sync.RWMutex // 提供了读写互斥锁 -- Read-Write Mutex
 }
 
+// NewBTree 初始化 BTree 索引结构
+func NewBTree() *BTree {
+	return &BTree{
+		tree: btree.New(32),
+		lock: &sync.RWMutex{}, // Or `new(sync.RWMutex)`
+	}
+}
+
 func (bt *BTree) Put(key []byte, pos *data.LogRecordPos) bool {
 	it := Item{key: key, pos: pos}
 	bt.lock.Lock() // 类似于上锁，上锁后只有这一个线程可以调用，其他线程无法调用，从而避免了竞态条件
