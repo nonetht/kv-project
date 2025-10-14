@@ -1,20 +1,33 @@
 package fio
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
+// 在测试之后，我们要将测试之中产生的临时文件清除掉
+func destoryFile(name string) {
+	if err := os.RemoveAll(name); err != nil {
+		panic(err)
+	}
+}
+
 func TestFileIOManager(t *testing.T) {
-	fio, err := NewFileIOManager(filepath.Join("/tmp", "a.data"))
+	path := filepath.Join("/tmp", "a.data")
+	fio, err := NewFileIOManager(path)
+	defer destoryFile(path) // ?
+
 	assert.Nil(t, err)
 	assert.NotNil(t, fio)
 }
 
 func TestFileIO_Write(t *testing.T) {
-	fio, err := NewFileIOManager(filepath.Join("/tmp", "a.data"))
+	path := filepath.Join("/tmp", "a.data")
+	fio, err := NewFileIOManager(path)
+	defer destoryFile(path)
 	assert.Nil(t, err)
 	assert.NotNil(t, fio)
 
@@ -32,7 +45,10 @@ func TestFileIO_Write(t *testing.T) {
 func TestFileIO_Read(t *testing.T) {
 
 	// 注意需要对file进行更改，不要一直使用a.data文件
-	fio, err := NewFileIOManager(filepath.Join("/tmp", "b.data"))
+	path := filepath.Join("/tmp", "b.data")
+	fio, err := NewFileIOManager(path)
+	defer destoryFile(path)
+
 	assert.Nil(t, err)
 	assert.NotNil(t, fio)
 
@@ -56,5 +72,23 @@ func TestFileIO_Read(t *testing.T) {
 }
 
 func TestFileIO_Sync(t *testing.T) {
+	path := filepath.Join("/tmp", "c.data")
+	fio, err := NewFileIOManager(path)
+	defer destoryFile(path)
 
+	assert.Nil(t, err)
+	assert.NotNil(t, fio)
+
+	err = fio.Sync()
+	assert.Nil(t, err)
+}
+
+func TestFileIO_Close(t *testing.T) {
+	path := filepath.Join("/tmp", "d.data")
+	fio, err := NewFileIOManager(path)
+	defer destoryFile(path)
+
+	err = fio.Close()
+	assert.Nil(t, err)
+	assert.NotNil(t, fio)
 }
