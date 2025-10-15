@@ -10,7 +10,7 @@ import (
 // BTree 索引，主要是封装了 google 的 btree kv
 // 我们的BTree就实现了Indexer接口，这样未来如果是更换为其他数据结构的话，比如哈希表，会更灵活
 type BTree struct {
-	tree *btree.BTree
+	tree *btree.BTree  // 非线程安全，因此需要加锁
 	lock *sync.RWMutex // 提供了读写互斥锁 -- Read-Write Mutex
 }
 
@@ -25,6 +25,7 @@ func NewBTree() *BTree {
 func (bt *BTree) Put(key []byte, pos *data.LogRecordPos) bool {
 	it := Item{key: key, pos: pos}
 	bt.lock.Lock() // 类似于上锁，上锁后只有这一个线程可以调用，其他线程无法调用，从而避免了竞态条件
+	// 实际上添加的不是Item，而是一个指向Item类型的指针
 	bt.tree.ReplaceOrInsert(&it)
 	bt.lock.Unlock()
 	return true

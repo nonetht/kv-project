@@ -3,6 +3,7 @@ package fio
 import "os"
 
 // FileIO 标准系统文件 IO
+// 实现了 IOManager 这个接口
 type FileIO struct {
 	fd *os.File
 }
