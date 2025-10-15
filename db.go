@@ -16,6 +16,7 @@ type DB struct {
 	index        index.Indexer             // 索引信息
 }
 
+// Put 写入 Key/Value数据，同时Key不为空
 func (db *DB) Put(key []byte, value []byte) error {
 	// 判断 key 是否有效
 	if len(key) == 0 {
@@ -41,6 +42,53 @@ func (db *DB) Put(key []byte, value []byte) error {
 		return ErrIndexUpdateFailed
 	}
 	return nil
+}
+
+// Get 读取LogRecord，即存储的数据文件
+// 但是，在拿到LogRecord首先要获取对应的索引，即LogRecordPos，随后有了索引才可以拿到对应的数据文件，最后通过偏移量读取数据文件中我们所需要的数据
+func (db *DB) Get(key []byte) ([]byte, error) {
+
+	// 需要加锁
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	// 判断Key是否有效
+	if len(key) == 0 {
+		return nil, ErrKeyIsEmpty
+	}
+
+	// 从内存数据结构题中取出 key 对应的索引信息
+	logRecordPos := db.index.Get(key)
+	// 没有找到，说明 key 不存在
+	if logRecordPos == nil {
+		return nil, ErrKeyNotFound
+	}
+
+	// 如果有对应位置信息，根据文件 id 找到对应数据文件
+	var dataFile *data.DataFile
+	if db.activeFile.FileId == logRecordPos.Fid {
+		dataFile = db.activeFile
+	} else {
+		dataFile = db.inactiveFile[logRecordPos.Fid]
+	}
+
+	// 数据文件为空
+	if dataFile == nil {
+		return nil, ErrDataFileNotExist
+	}
+
+	// 根据数据偏移量来读取数据
+	logRecord, err := dataFile.ReadLogRecord(logRecordPos.Offset)
+	if err != nil {
+		return nil, err
+	}
+
+	// ??
+	if logRecord.Type == data.LogRecordDeleted {
+		return nil, ErrKeyNotFound
+	}
+
+	return logRecord.Value, nil
 }
 
 // 将一条logRecord添加到...随后返回索引的地址信息
