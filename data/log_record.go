@@ -21,3 +21,8 @@ type LogRecord struct {
 	Value []byte
 	Type  LogRecordType // 新增/修改，还是删除？
 }
+
+// EncodeLogRecord 对 LogRecord 编码，返回字节数组以及长度
+func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
+	return nil, 0
+}

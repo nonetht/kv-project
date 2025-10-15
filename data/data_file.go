@@ -11,5 +11,14 @@ type DataFile struct {
 
 // OpenDataFile 打开新的数据文件
 func OpenDataFile(dirPath string, fileId uint32) (*DataFile, error) {
+	return nil, nil
+}
 
+// Sync 貌似是数据持久化方法，就是将数据持久化
+func (df *DataFile) Sync() error {
+	return nil
+}
+
+func (df *DataFile) Write(buf []byte) error {
+	return nil
 }
