@@ -3,6 +3,11 @@ package bitcask_go
 import (
 	"bitcask-go/data"
 	"bitcask-go/index"
+	"errors"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -14,6 +19,37 @@ type DB struct {
 	activeFile   *data.DataFile            // 当前活跃数据文件
 	inactiveFile map[uint32]*data.DataFile // 不活跃数据文件，也就是不活跃的数据文件。
 	index        index.Indexer             // 索引信息
+}
+
+// Open 打开 bitcask 存储引擎实例
+func Open(setup SetUp) (*DB, error) {
+	// 对用户传入的配置项进行校验
+	if err := checkOptions(setup); err != nil {
+		return nil, err
+	}
+
+	// 判断数据目录是否存在，如果不存在，则创建这个目录
+	if _, err := os.Stat(setup.DirPath); os.IsNotExist(err) {
+		if err := os.Mkdir(setup.DirPath, os.ModePerm); err != nil {
+			return nil, err
+		}
+	}
+
+	// 初始化 DB 实例结构体
+	db := &DB{
+		setup:        setup,
+		mu:           new(sync.RWMutex),
+		activeFile:   nil,
+		inactiveFile: make(map[uint32]*data.DataFile),
+		index:        index.NewIndexer(setup.IndexType),
+	}
+
+	// 加载数据文件
+	if err := db.loadDataFile(); err != nil {
+		return nil, err
+	}
+
+	return db, nil
 }
 
 // Put 写入 Key/Value数据，同时Key不为空
@@ -157,5 +193,61 @@ func (db *DB) activeFileInit() error {
 		return err
 	}
 	db.activeFile = dataFile
+	return nil
+}
+
+// 从磁盘中加载数据文件
+func (db *DB) loadDataFile() error {
+	dirEntries, err := os.ReadDir(db.setup.DirPath)
+	if err != nil {
+		return err
+	}
+	var fileIds []int
+	// 遍历目录之中所有的文件，以.data文件为后缀便是我们的目标文件
+	for _, entry := range dirEntries {
+		// Name() 函数是什么？
+		if strings.HasSuffix(entry.Name(), data.DataFileNameSuffix) {
+			// 000001.data -> 000001
+			splitName := strings.Split(entry.Name(), ".")
+			fileId, err := strconv.Atoi(splitName[0])
+			// 文件目录可能损坏
+			if err != nil {
+				return ErrDataDirectoryCorrupted
+			}
+			// 为什么不写成 fileIdes.append(fieId) 呢？
+			fileIds = append(fileIds, fileId)
+		}
+	}
+
+	// 对文件 id 进行排序，选择升序排序
+	sort.Ints(fileIds)
+
+	// 遍历每个文件id，并打开对应的数据文件
+	for i, fid := range fileIds {
+		dataFile, err := data.OpenDataFile(db.setup.DirPath, uint32(fid))
+		if err != nil {
+			return err
+		}
+
+		// 我不理解为什么要做这么一步...
+		// 遍历到最后的文件，即最新的文件。这便是当前活跃文件，其他的加入到旧数据文件之中
+		if i == len(fileIds)-1 {
+			db.activeFile = dataFile
+		} else {
+			db.inactiveFile[uint32(fid)] = dataFile
+		}
+	}
+
+	return nil
+}
+
+func checkOptions(setup SetUp) error {
+	if setup.DirPath == "" {
+		return errors.New("database dir path is empty")
+	}
+	// 数据大小预值无效
+	if setup.DataSize <= 0 {
+		return errors.New("database data size must be positive")
+	}
 	return nil
 }
