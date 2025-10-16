@@ -14,6 +14,10 @@ func OpenDataFile(dirPath string, fileId uint32) (*DataFile, error) {
 	return nil, nil
 }
 
+func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, error) {
+	return nil, nil
+}
+
 // Sync 貌似是数据持久化方法，就是将数据持久化
 func (df *DataFile) Sync() error {
 	return nil
