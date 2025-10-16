@@ -4,6 +4,7 @@ import (
 	"bitcask-go/data"
 	"bitcask-go/index"
 	"errors"
+	"io"
 	"os"
 	"sort"
 	"strconv"
@@ -16,6 +17,7 @@ import (
 type DB struct {
 	setup        SetUp                     // 数据库配置
 	mu           *sync.RWMutex             // 读写锁
+	fileIds      []int                     // 文件 id，只能在加载索引的时候使用，不能在其他地方更新和使用
 	activeFile   *data.DataFile            // 当前活跃数据文件
 	inactiveFile map[uint32]*data.DataFile // 不活跃数据文件，也就是不活跃的数据文件。
 	index        index.Indexer             // 索引信息
@@ -49,6 +51,11 @@ func Open(setup SetUp) (*DB, error) {
 		return nil, err
 	}
 
+	// 从数据文件中加载索引
+	if err := db.loadIndexFromDataFile(); err != nil {
+		return nil, err
+	}
+
 	return db, nil
 }
 
@@ -61,14 +68,14 @@ func (db *DB) Put(key []byte, value []byte) error {
 
 	// 构造LogRecord结构体
 	// 构建函数体的话，不是map形式为什么写成键值对这种呢？-> 估计是为了更直观吧，让结构体字段部分更加直观。
-	log_record := data.LogRecord{
+	logRecord := data.LogRecord{
 		Key:   key,
 		Value: value,
 		Type:  data.LogRecordNormal,
 	}
 
 	// 追加写入到当前活跃文件中
-	pos, err := db.appendLogRecord(&log_record)
+	pos, err := db.appendLogRecord(&logRecord)
 	if err != nil {
 		return err
 	}
@@ -114,7 +121,7 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	}
 
 	// 根据数据偏移量来读取数据
-	logRecord, err := dataFile.ReadLogRecord(logRecordPos.Offset)
+	logRecord, _, err := dataFile.ReadLogRecord(logRecordPos.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -221,6 +228,8 @@ func (db *DB) loadDataFile() error {
 
 	// 对文件 id 进行排序，选择升序排序
 	sort.Ints(fileIds)
+	// 排序后，进行赋值操作
+	db.fileIds = fileIds
 
 	// 遍历每个文件id，并打开对应的数据文件
 	for i, fid := range fileIds {
@@ -238,6 +247,56 @@ func (db *DB) loadDataFile() error {
 		}
 	}
 
+	return nil
+}
+
+// 从数据文件加载索引
+// 遍历文件中所有记录，并更新到内存索引之中
+func (db *DB) loadIndexFromDataFile() error {
+	// 如果拿到的是一个空的数据库的话
+	if len(db.fileIds) == 0 {
+		return nil
+	}
+
+	// 遍历所有文件id，处理文件中的记录
+	for i, fid := range db.fileIds {
+		var fileId = uint32(fid)
+		var dataFile *data.DataFile
+
+		// 为活跃文件，则从活跃文件中寻找
+		if fileId == db.activeFile.FileId {
+			dataFile = db.activeFile
+			// 反之，则从旧文件之中查找
+		} else {
+			dataFile = db.inactiveFile[fileId]
+		}
+
+		var offset int64 = 0
+		for {
+			logRecord, size, err := dataFile.ReadLogRecord(offset)
+			// 正常情况下读到最后一个文件，随即正常返回
+			if err != nil && err == io.EOF {
+				break
+			} else if err != io.EOF {
+				return err
+			}
+			// 构建内存索引，并保存
+			logRecordPos := &data.LogRecordPos{Fid: fileId, Offset: offset}
+			if logRecord.Type == data.LogRecordDeleted {
+				db.index.Delete(logRecord.Key)
+			} else {
+				db.index.Put(logRecord.Key, logRecordPos)
+			}
+
+			// 递增offset，下一次从新的位置读取
+			offset += size
+		}
+
+		// 如果是当前活跃文件， 更新文件WriteOff
+		if i == len(db.fileIds)-1 {
+			db.activeFile.WriteOff = offset
+		}
+	}
 	return nil
 }
 
