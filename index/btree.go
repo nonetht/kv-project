@@ -27,13 +27,14 @@ func (bt *BTree) Put(key []byte, pos *data.LogRecordPos) bool {
 	bt.mu.Lock()
 	defer bt.mu.Unlock() // 这里我们使用 defer
 
-	// ReplaceOrInsert 函数期待的是一个实现了 btree.Item 接口的变量
+	// ReplaceOrInsert 函数期待的是一个**实现了 btree.Item 接口**的变量
 	bt.btree.ReplaceOrInsert(it) // 实际上装入的是 &Item类型的变量
+	return true                  // 肯定就是always返回true
 }
 
-// Get
+// Get 通过key获取对应的索引信息
 func (bt *BTree) Get(key []byte) *data.LogRecordPos {
-	it := &Item{key}
+	it := &Item{key: key}
 
 	bt.mu.RLock()
 	defer bt.mu.RUnlock()
@@ -47,7 +48,7 @@ func (bt *BTree) Get(key []byte) *data.LogRecordPos {
 	return btreeItem.(*Item).pos
 }
 
-// Delete
+// Delete 删除指定的key对应的索引记录
 func (bt *BTree) Delete(key []byte) bool {
 	bt.mu.Lock()
 	defer bt.mu.Unlock()
