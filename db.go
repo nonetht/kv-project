@@ -23,10 +23,7 @@ type DB struct {
 }
 
 // Open 打开 bitcask 存储引擎实例
-// 1. 首先是根据用户配置项进行设置
-// 2. 随后判断目录是否存在，不存在则创建目录
-// 3. 初始化DB实例
-// 4. 随后加载DataFile、Index
+// 这是一个数据恢复的过程，在启动db的时候，我们的内存并不存储有关索引的信息，我们应该首先读取全部的LogRecord，以及其对应的索引信息。
 func Open(setup SetUp) (*DB, error) {
 	// 对用户传入的配置项进行校验
 	if err := checkOptions(setup); err != nil {
@@ -93,6 +90,35 @@ func (db *DB) Put(key []byte, value []byte) error {
 	if ok := db.index.Put(key, pos); !ok {
 		return ErrIndexUpdateFailed
 	}
+	return nil
+}
+
+// Delete 根据key 删除对应数据
+func (db *DB) Delete(key []byte) error {
+	if len(key) == 0 {
+		return ErrKeyIsEmpty
+	}
+
+	// 从内存索引中查找 key 是否存在
+	if pos := db.index.Get(key); pos == nil {
+		return nil
+	}
+
+	// 构建 LogRecord，标识其可以被删除
+	logRecord := &data.LogRecord{Key: key, Type: data.LogRecordDeleted}
+
+	// 写入到数据文件中
+	_, err := db.appendLogRecord(logRecord)
+	if err != nil {
+		return err
+	}
+
+	// 从内存索引中将对应 key 删除
+	ok := db.index.Delete(key)
+	if !ok {
+		return ErrIndexUpdateFailed
+	}
+
 	return nil
 }
 
@@ -241,7 +267,7 @@ func (db *DB) loadDataFile() error {
 
 	// 对文件 id 进行排序，选择升序排序
 	sort.Ints(fileIds)
-	// 排序后，进行赋值操作
+	// 排序后，进行赋值操作，将所有的文件id存储到fileId字段之中
 	db.fileIds = fileIds
 
 	// 遍历每个文件id，并打开对应的数据文件
@@ -294,10 +320,16 @@ func (db *DB) loadIndexFromDataFile() error {
 			}
 			// 构建内存索引，并保存
 			logRecordPos := &data.LogRecordPos{Fid: fileId, Offset: offset}
+			var ok bool
 			if logRecord.Type == data.LogRecordDeleted {
-				db.index.Delete(logRecord.Key)
+				ok = db.index.Delete(logRecord.Key)
 			} else {
-				db.index.Put(logRecord.Key, logRecordPos)
+				// 将索引添加到 index 字段之中
+				ok = db.index.Put(logRecord.Key, logRecordPos)
+			}
+
+			if !ok {
+				return ErrIndexUpdateFailed
 			}
 
 			// 递增offset，下一次从新的位置读取
