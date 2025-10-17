@@ -13,7 +13,6 @@ import (
 )
 
 // DB bitcask 存储引擎实例
-// 为什么活跃文件和不活跃文件的差异如此之大呢？
 type DB struct {
 	setup        SetUp                     // 数据库配置
 	mu           *sync.RWMutex             // 读写锁
@@ -24,6 +23,10 @@ type DB struct {
 }
 
 // Open 打开 bitcask 存储引擎实例
+// 1. 首先是根据用户配置项进行设置
+// 2. 随后判断目录是否存在，不存在则创建目录
+// 3. 初始化DB实例
+// 4. 随后加载DataFile、Index
 func Open(setup SetUp) (*DB, error) {
 	// 对用户传入的配置项进行校验
 	if err := checkOptions(setup); err != nil {
@@ -38,6 +41,12 @@ func Open(setup SetUp) (*DB, error) {
 	}
 
 	// 初始化 DB 实例结构体
+	/* 这是一种好的Go语言实践，被称为：*Struct Literal with Field Names*.
+	1. 清晰直观
+	2. 顺序无关，可以不按结构体定义顺序来初始化
+	3. Robust，即便是在LogRecord新增了字段，我们原本的代码仍旧有效
+	*/
+
 	db := &DB{
 		setup:        setup,
 		mu:           new(sync.RWMutex),
@@ -60,6 +69,7 @@ func Open(setup SetUp) (*DB, error) {
 }
 
 // Put 写入 Key/Value数据，同时Key不为空
+// 这里写入的时候，是以 LogRecord 形式进行写入的
 func (db *DB) Put(key []byte, value []byte) error {
 	// 判断 key 是否有效
 	if len(key) == 0 {
@@ -67,7 +77,6 @@ func (db *DB) Put(key []byte, value []byte) error {
 	}
 
 	// 构造LogRecord结构体
-	// 构建函数体的话，不是map形式为什么写成键值对这种呢？-> 估计是为了更直观吧，让结构体字段部分更加直观。
 	logRecord := data.LogRecord{
 		Key:   key,
 		Value: value,
@@ -100,9 +109,9 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 		return nil, ErrKeyIsEmpty
 	}
 
-	// 从内存数据结构题中取出 key 对应的索引信息
+	// 从内存数据结构中取出 key 对应的索引信息
 	logRecordPos := db.index.Get(key)
-	// 没有找到，说明 key 不存在
+	// 没有找到，说明 key 对应的索引信息不存在
 	if logRecordPos == nil {
 		return nil, ErrKeyNotFound
 	}
@@ -126,7 +135,7 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	// ??
+	// 这里如果说对应的key被打上了删除的标签，我们也要善意欺骗用户：该键未找到
 	if logRecord.Type == data.LogRecordDeleted {
 		return nil, ErrKeyNotFound
 	}
@@ -168,7 +177,7 @@ func (db *DB) appendLogRecord(logRecord *data.LogRecord) (*data.LogRecordPos, er
 		}
 	}
 
-	writeOff := db.activeFile.WriteOff // ?这是做什么的
+	writeOff := db.activeFile.WriteOff // 这是当前活跃文件已写入的总字节数
 	if err := db.activeFile.Write(encodedLogRecord); err != nil {
 		return nil, err
 	}
@@ -205,6 +214,7 @@ func (db *DB) activeFileInit() error {
 
 // 从磁盘中加载数据文件
 func (db *DB) loadDataFile() error {
+	// os.ReadDir 返回一个[]os.DirEntry切片，其中每个os.DirEntry 代表目录下一个文件或子目录
 	dirEntries, err := os.ReadDir(db.setup.DirPath)
 	if err != nil {
 		return err
@@ -212,16 +222,19 @@ func (db *DB) loadDataFile() error {
 	var fileIds []int
 	// 遍历目录之中所有的文件，以.data文件为后缀便是我们的目标文件
 	for _, entry := range dirEntries {
-		// Name() 函数是什么？
+		// Name() 函数是什么？返回文件/目录的名称，不包括路径信息
 		if strings.HasSuffix(entry.Name(), data.DataFileNameSuffix) {
 			// 000001.data -> 000001
 			splitName := strings.Split(entry.Name(), ".")
-			fileId, err := strconv.Atoi(splitName[0])
+			fileId, err := strconv.Atoi(splitName[0]) // string -> int
+			// 为什么能根据 err 来判断文件目录是否损坏呢？
 			// 文件目录可能损坏
 			if err != nil {
 				return ErrDataDirectoryCorrupted
 			}
 			// 为什么不写成 fileIdes.append(fieId) 呢？
+			// 因为不同于Python，append 并不是切片的方法，而是一个内置、独立的函数
+			// slice = append(slice, ele1, ele2) -> 返回一个新的、可能扩容的切片
 			fileIds = append(fileIds, fileId)
 		}
 	}
@@ -238,7 +251,6 @@ func (db *DB) loadDataFile() error {
 			return err
 		}
 
-		// 我不理解为什么要做这么一步...
 		// 遍历到最后的文件，即最新的文件。这便是当前活跃文件，其他的加入到旧数据文件之中
 		if i == len(fileIds)-1 {
 			db.activeFile = dataFile
@@ -251,7 +263,7 @@ func (db *DB) loadDataFile() error {
 }
 
 // 从数据文件加载索引
-// 遍历文件中所有记录，并更新到内存索引之中
+// 遍历文件中所有记录，随后放入到db结构体的 index 字段中
 func (db *DB) loadIndexFromDataFile() error {
 	// 如果拿到的是一个空的数据库的话
 	if len(db.fileIds) == 0 {
