@@ -45,7 +45,7 @@ type Item struct {
 	pos *data.LogRecordPos
 }
 
-// Less 接收者为*Item类型的函数，实现了Item接口
+// Less 接收者为*Item类型的函数，实现了 btree.Item 接口
 func (ai *Item) Less(bi btree.Item) bool {
 	return bytes.Compare(ai.key, bi.(*Item).key) == -1
 }

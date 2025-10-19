@@ -43,7 +43,8 @@ func OpenDataFile(dirPath string, fileId uint32) (*DataFile, error) {
 // Ps. 为什么LogRecord来要记录 key，value 的长度呢？
 // 先根据 offset 读取 header 部分，随后在拿到key，value长度之后，根据key，value的长度来读取存储的具体key，value信息
 func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
-	headerBuf, err := df.readNBytes(maxLogRecordSize, offset)
+	// 读取 head 信息
+	headerBuf, err := df.readNBytes(maxLogRecordHeadSize, offset)
 	if err != nil {
 		return nil, 0, err
 	}

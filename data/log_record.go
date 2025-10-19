@@ -9,7 +9,7 @@ const (
 
 // crc type keySize valueSize
 // 4 + 1 + 5 + 5(binary.MaxVarintLen32)
-const maxLogRecordSize = 15
+const maxLogRecordHeadSize = 15
 
 // LogRecordPos 数据内存索引，主要是描述数据在磁盘上的位置
 // 定义了目录中每一条索引的格式。告诉我们一个一个Key对应的数据存在哪个文件的哪个位置
@@ -40,6 +40,10 @@ func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
 }
 
 // DecodeLogRecordHeader 对字节数组的 Header 信息进行解码，从而得到一个 LogRecordHeader
-func DecodeLogRecordHeader(buf []byte) (*LogRecordHeader, error) {
-	return nil, nil
+func DecodeLogRecordHeader(buf []byte) (*LogRecordHeader, int64) {
+	return nil, 0
+}
+
+func getLogrecordCRC(lr *LogRecord, head []byte) uint32 {
+	return 0
 }
