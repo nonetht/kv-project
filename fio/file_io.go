@@ -38,3 +38,14 @@ func (fio *FileIO) Sync() error {
 func (fio *FileIO) Close() error {
 	return fio.fd.Close()
 }
+
+// Size 先获取FileInfo，随后获取对应的文件大小。
+// FileInfo 应该存储了该文件的大小
+func (fio *FileIO) Size() (int64, error) {
+	// Stat returns the [FileInfo] structure describing file.
+	stat, err := fio.fd.Stat()
+	if err != nil {
+		return 0, err
+	}
+	return stat.Size(), nil // Size: length in bytes for regular files
+}
