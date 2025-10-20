@@ -41,9 +41,11 @@ type LogRecordHeader struct {
 
 // EncodeLogRecord 对 LogRecord 编码，返回字节数组以及长度
 // +--------------+-----------+---------------+---------------+--------+--------+
-// | crc 校验值   | type 类型  | key size      | value size     | key    | value  |
+// |                     LogRecordHeader部分                   |   LogRecord内容 |
 // +--------------+-----------+---------------+---------------+--------+--------+
-// | 4字节        | 1字节      | 变长(最大5)    | 变长(最大5)     | 变长   | 变长   |
+// | crc 校验值   | type 类型  | key size      | value size     | key   | value |
+// +--------------+-----------+---------------+---------------+--------+--------+
+// | 4字节        | 1字节      | 变长(最大5)    | 变长(最大5)     | 变长   | 变长    |
 // +--------------+-----------+---------------+---------------+--------+--------+
 func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
 	// 初始化一个 header 部分的字节数组
@@ -100,6 +102,7 @@ func DecodeLogRecordHeader(buf []byte) (*LogRecordHeader, int64) {
 	header.keySize = uint32(keySize)
 	index += n
 
+	// TODO: 同上，我不理解怎样获取的
 	valueSize, n := binary.Varint(buf[index:])
 	header.valueSize = uint32(valueSize)
 	index += n // index 代表实际的 header 的长度
@@ -107,6 +110,15 @@ func DecodeLogRecordHeader(buf []byte) (*LogRecordHeader, int64) {
 	return header, int64(index)
 }
 
-func getLogrecordCRC(lr *LogRecord, head []byte) uint32 {
-	return 0
+func getLogRecordCRC(lr *LogRecord, head []byte) uint32 {
+	if lr == nil {
+		return 0
+	}
+
+	// head 部分，但是不是最终的crc的值，还要加上后面 Key，Value 两字段才行
+	crc := crc32.ChecksumIEEE(head[:])
+	crc = crc32.Update(crc, crc32.IEEETable, lr.Key)
+	crc = crc32.Update(crc, crc32.IEEETable, lr.Value)
+
+	return crc
 }
