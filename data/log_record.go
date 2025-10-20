@@ -33,16 +33,18 @@ type LogRecord struct {
 
 // LogRecordHeader 定义 LogRecord 中的 Header 的结构信息
 type LogRecordHeader struct {
-	crc       uint32        // crc 校验值
-	readType  LogRecordType // 表示 LogRecord 的类型，查看其是否是待删除类型（是否是墓碑值）
-	keySize   uint32
-	valueSize uint32
+	crc        uint32        // crc 校验值
+	recordType LogRecordType // 表示 LogRecord 的类型，查看其是否是待删除类型（是否是墓碑值）
+	keySize    uint32
+	valueSize  uint32
 }
 
 // EncodeLogRecord 对 LogRecord 编码，返回字节数组以及长度
-// crc 校验值 ｜ type类型 ｜ key size ｜ value size ｜ key ｜ value
-//
-//	4     |     1    |          变长（最大5） 。 ｜ 变长 ｜ 变长
+// +--------------+-----------+---------------+---------------+--------+--------+
+// | crc 校验值   | type 类型  | key size      | value size     | key    | value  |
+// +--------------+-----------+---------------+---------------+--------+--------+
+// | 4字节        | 1字节      | 变长(最大5)    | 变长(最大5)     | 变长   | 变长   |
+// +--------------+-----------+---------------+---------------+--------+--------+
 func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
 	// 初始化一个 header 部分的字节数组
 	header := make([]byte, maxLogRecordHeadSize)
@@ -76,7 +78,33 @@ func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
 
 // DecodeLogRecordHeader 对字节数组的 header 信息进行解码，从而得到一个 LogRecordHeader
 func DecodeLogRecordHeader(buf []byte) (*LogRecordHeader, int64) {
-	return nil, 0
+	// hard code style, not good
+	// 如果连 crc 4个字节都没有占到，说明有问题
+	// TODO: 但是我对此有问题，就是为什么是4而不是5呢？看 EncodeLogRecord 函数之中，index一开始设置变为5，为什么不是5呢？
+	if len(buf) <= 4 {
+		return nil, 0
+	}
+
+	// 先读取部分属性信息
+	header := &LogRecordHeader{
+		crc:        binary.LittleEndian.Uint32(buf[:4]),
+		recordType: buf[4],
+	}
+
+	// 从下边为5的位置拿取
+	var index = 5
+
+	// 取出实际的 key size
+	// TODO: 这是怎么取得的呢？我不理解。
+	keySize, n := binary.Varint(buf[index:])
+	header.keySize = uint32(keySize)
+	index += n
+
+	valueSize, n := binary.Varint(buf[index:])
+	header.valueSize = uint32(valueSize)
+	index += n // index 代表实际的 header 的长度
+
+	return header, int64(index)
 }
 
 func getLogrecordCRC(lr *LogRecord, head []byte) uint32 {
