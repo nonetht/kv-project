@@ -77,7 +77,7 @@ func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 	keySize, valueSize := int64(head.keySize), int64(head.valueSize)
 	var recordSize = headSize + keySize + valueSize
 
-	logRecord := &LogRecord{Type: head.readType}
+	logRecord := &LogRecord{Type: head.recordType}
 
 	// 读取一个实际的key，value
 	if keySize > 0 || valueSize > 0 {
@@ -92,7 +92,7 @@ func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 	}
 
 	// 校验数据 crc 是否正确，校验数据有效性
-	crc := getLogrecordCRC(logRecord, headerBuf[crc32.Size:headSize])
+	crc := getLogRecordCRC(logRecord, headerBuf[crc32.Size:headSize])
 	if crc != head.crc {
 		return nil, 0, ErrInvalidCRC
 	}

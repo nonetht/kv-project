@@ -52,17 +52,21 @@ func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
 	header := make([]byte, maxLogRecordHeadSize)
 
 	// 第五个字节存储 Type
-	header[5] = logRecord.Type
+	// 我之前写成了 header[5] = ...
+	header[4] = logRecord.Type
 	var index = 5
-	//  5 字节之后，存储的是 key 和 value的长度
+	// 5 字节之后，存储的是 key 和 value的长度
 	// 使用变长类型，节省空间
 	// binary.PutVarint 方法会返回写入的字节的数量，因此用 index 来递增就很合适
 	index += binary.PutVarint(header[index:], int64(len(logRecord.Key)))
 	index += binary.PutVarint(header[index:], int64(len(logRecord.Value)))
 
+	//for _, val := range header {
+	//	fmt.Println("val: ", val)
+	//}
+
 	// 整条logRecord的编码后长度 = header的长度 + Key的长度 + Value的长度
 	var size = index + len(logRecord.Key) + len(logRecord.Value)
-
 	encodedBytes := make([]byte, size)
 
 	// 将 header 部分拷贝到长度为size的数组中
@@ -74,11 +78,12 @@ func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
 	// 对整个 LogRecord 进行 crc 校验
 	crc := crc32.ChecksumIEEE(encodedBytes[4:])
 	// 小端序，为什么呢？
-	binary.LittleEndian.PutUint32(encodedBytes[4:], crc)
+	binary.LittleEndian.PutUint32(encodedBytes[:4], crc) // 之前写成了 encodedBytes[4:]
+
 	return encodedBytes, int64(size)
 }
 
-// DecodeLogRecordHeader 对字节数组的 header 信息进行解码，从而得到一个 LogRecordHeader
+// DecodeLogRecordHeader 对字节数组的 header 信息进行解码，从而得到一个 LogRecordHeader，以及其对应的长度
 func DecodeLogRecordHeader(buf []byte) (*LogRecordHeader, int64) {
 	// hard code style, not good
 	// 如果连 crc 4个字节都没有占到，说明有问题
