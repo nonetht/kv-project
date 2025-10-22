@@ -65,3 +65,26 @@ func TestDataFile_Sync(t *testing.T) {
 	err = dataFile.Sync()
 	assert.Nil(t, err)
 }
+
+func TestDataFile_ReadLogRecord(t *testing.T) {
+	dataFile, err := OpenDataFile(os.TempDir(), 222)
+	assert.Nil(t, err)
+	assert.NotNil(t, dataFile)
+
+	// 只有一条 LogRecord
+	rec1 := &LogRecord{
+		Key:   []byte("name"),
+		Value: []byte("bitcask-go"),
+		Type:  LogRecordNormal,
+	}
+
+	// 一旦涉及到 DataFile 我就开始有点不太理解...
+	res1, size1 := EncodeLogRecord(rec1)
+	err = dataFile.Write(res1)
+	assert.Nil(t, err)
+
+	readRec1, readSize1, err := dataFile.ReadLogRecord(0)
+	assert.Nil(t, err)
+	assert.Equal(t, rec1, readRec1)
+	assert.Equal(t, size1, readSize1)
+}
