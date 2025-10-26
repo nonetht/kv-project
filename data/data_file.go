@@ -40,7 +40,6 @@ func OpenDataFile(dirPath string, fileId uint32) (*DataFile, error) {
 }
 
 // ReadLogRecord 读取LogRecord，很重要的方法。根据偏移offset，来读取指定位置的LogRecord信息
-// Ps. 为什么LogRecord来要记录 key，value 的长度呢？
 // 先根据 offset 读取 header 部分，随后在拿到key，value长度之后，根据key，value的长度来读取存储的具体key，value信息
 func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 
@@ -77,6 +76,7 @@ func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 	keySize, valueSize := int64(head.keySize), int64(head.valueSize)
 	var recordSize = headSize + keySize + valueSize
 
+	// 着手开始创建一个新的 LogRecord
 	logRecord := &LogRecord{Type: head.recordType}
 
 	// 读取一个实际的key，value

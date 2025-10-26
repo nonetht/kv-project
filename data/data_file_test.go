@@ -83,8 +83,13 @@ func TestDataFile_ReadLogRecord(t *testing.T) {
 	err = dataFile.Write(res1)
 	assert.Nil(t, err)
 
+	// readSize1 就是 LogRecord 的总长度
 	readRec1, readSize1, err := dataFile.ReadLogRecord(0)
 	assert.Nil(t, err)
 	assert.Equal(t, rec1, readRec1)
 	assert.Equal(t, size1, readSize1)
+
+	// 多条 LogRecord 的从不同的位置读取
+
+	// 被删除的数据在数据文件的末尾
 }
