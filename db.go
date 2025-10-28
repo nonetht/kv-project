@@ -3,6 +3,7 @@ package bitcask_go
 import (
 	"bitcask-go/data"
 	"errors"
+	"io"
 	"sync"
 )
 
@@ -10,13 +11,13 @@ import (
 type DB struct {
 	setup        Setup
 	mu           *sync.Mutex
-	activeFile   *data.DataFile // 当前活跃文件
-	inactiveFile *data.DataFile // 旧数据文件
+	activeFile   *data.DataFile            // 当前活跃文件
+	inactiveFile map[uint32]*data.DataFile // 不活跃数据文件，也就是不活跃的数据文件。
 }
 
 // Put 用户写入的方法
 func (db *DB) Put(key []byte, value []byte) error {
-	if len(Key) == 0 {
+	if len(key) == 0 {
 		return ErrKeyIsEmpty
 	}
 
@@ -57,8 +58,44 @@ func (db *DB) appendLogRecord(logRecord data.LogRecord) (*data.LogRecordPos, err
 	}
 
 	// 首先将 LogRecord 进行编码为字节数组类型
+	encodedRecord, size := data.EncodeLogRecord(logRecord)
+	// **判断**，超出预值的话：
+	// 1. 将现有的数据文件转换为旧的数据文件，即 activeFile -> inactiveFile
+	// 2. 打开一个新的数据文件，
+	if db.activeFile.WriteOff+size > db.setup.DataFileSize {
+		// 将当前活跃文件持久化，持久化到磁盘之中
+		if err := db.activeFile.Sync(); err != nil {
+			return nil, err
+		}
+
+		// 持久化后，将当前活跃文件转换为旧数据文件中
+		db.inactiveFile[db.activeFile.FileId] = db.activeFile
+
+		// 随后打开新的数据文件
+		if err := db.initActiveFile(); err != nil {
+			return nil, err
+		}
+	}
 
 	// 如果 logRecord 的 Type 是待删除类型呢？
+	writeOff := db.activeFile.WriteOff
+	if err := db.activeFile.Write(encodedRecord); err != nil {
+		return nil, err
+	}
+
+	// 判断一下，就是是否需要对数据进行一次安全的持久化。简单来说，相当于用户所拥有的一个可选项目
+	if db.setup.SyncWrites {
+		if err := db.activeFile.Sync(); err != nil {
+			return nil, err
+		}
+	}
+
+	// 随后构造一个内存索引信息，并返回
+	pos := &data.LogRecordPos{
+		Fid:    db.activeFile.FileId,
+		Offset: writeOff,
+	}
+	return pos, nil
 
 }
 

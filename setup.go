@@ -1,6 +1,7 @@
 package bitcask_go
 
 type Setup struct {
-	DirPath string // 数据库数据目录
-
+	DirPath      string // 数据库数据目录
+	DataFileSize int64
+	SyncWrites   bool
 }

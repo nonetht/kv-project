@@ -27,7 +27,7 @@ func NewLogRecord(key []byte, value []byte) *LogRecord {
 // 说明了文件名称以及位置
 type LogRecordPos struct {
 	Fid    uint32
-	offset int64
+	Offset int64
 }
 
 // EncodeLogRecord 对 LogRecod 进行编码，返回字节数组
