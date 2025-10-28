@@ -20,8 +20,6 @@ func NewBTree() *BTree {
 	}
 }
 
-// 接下来我们要让BTree能够实现Indexer接口
-
 // Put 将键和logRecord位置信息存储到内存之中
 func (bt *BTree) Put(key []byte, pos *data.LogRecordPos) bool {
 	it := &Item{key, pos}
