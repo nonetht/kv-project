@@ -2,8 +2,7 @@ package bitcask_go
 
 import (
 	"bitcask-go/data"
-	"errors"
-	"io"
+	"bitcask-go/index"
 	"sync"
 )
 
@@ -13,9 +12,10 @@ type DB struct {
 	mu           *sync.Mutex
 	activeFile   *data.DataFile            // 当前活跃文件
 	inactiveFile map[uint32]*data.DataFile // 不活跃数据文件，也就是不活跃的数据文件。
+	index        index.Indexer             // 内存索引
 }
 
-// Put 用户写入的方法
+// Put 用户写入 Key/Value 数据，key不能为空
 func (db *DB) Put(key []byte, value []byte) error {
 	if len(key) == 0 {
 		return ErrKeyIsEmpty
@@ -34,17 +34,50 @@ func (db *DB) Put(key []byte, value []byte) error {
 		return err
 	}
 
-	// 我还要检测 logRecordPos 是否有效
-	if logRecordPos == nil {
-		return errors.New("logRecord is nil")
+	// 更新内存索引
+	if ok := db.index.Put(key, logRecordPos); !ok {
+		return ErrIndexUpdateFailed
+	}
+	return nil
+}
+
+func (db *DB) Get(key []byte) ([]byte, error) {
+	// 1. 根据key去内存索引中查找数据，如果没有找到，说明对应Key不存在，报错
+	// 2. 找到了，取出对应位置信息
+	// 3. 根据文件 id，去找到对应数据文件
+	// 3.1 如果是活跃文件，直接使用活跃文件
+	// 3.2 否则，从旧的数据文件中寻找
+	// 3.3 没有找到，报错
+
+	if len(key) == 0 {
+		return nil, ErrKeyIsEmpty
 	}
 
-	// 将 logRecordPos添加到内存之中，但是具体添加到哪里呢？
-	// 既然是添加到内存之中，就应该在 db 结构体中新增一个字段，用 map 来存储
+	// 如果没有找到，即 pos == nil，说明 key 不存在
+	pos := db.index.Get(key)
+	if pos == nil {
+		return nil, ErrKeyNotFound
+	}
+
+	// 问题是拿到了 pos 之后，我们应该怎样获取对应的数据文件呢？
+	// pos 的确有 fileId 字段，但是如何使用呢？怎样根据文件 id 找到数据文件呢？
+	var dataFile *data.DataFile
+	if db.activeFile.FileId == pos.Fid {
+		// 从 activeFile 之中寻找
+		dataFile = db.activeFile
+	} else if db.inactiveFile[pos.Fid] != nil {
+		// 反之，从 inactiveFile 这个map之中寻找
+		dataFile = db.inactiveFile[pos.Fid]
+	} else {
+		// 没有找到，则报错
+		return nil, ErrDataFileNotFound
+	}
+
+	// 现在我们获取了对应的 dataFile 之后呢？
 
 }
 
-// 返回写入数据的索引信息，随后内存会存放该索引信息数据
+// 追加写数据到活跃文件中
 func (db *DB) appendLogRecord(logRecord data.LogRecord) (*data.LogRecordPos, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -58,7 +91,7 @@ func (db *DB) appendLogRecord(logRecord data.LogRecord) (*data.LogRecordPos, err
 	}
 
 	// 首先将 LogRecord 进行编码为字节数组类型
-	encodedRecord, size := data.EncodeLogRecord(logRecord)
+	encodedRecord, size := data.EncodeLogRecord(&logRecord)
 	// **判断**，超出预值的话：
 	// 1. 将现有的数据文件转换为旧的数据文件，即 activeFile -> inactiveFile
 	// 2. 打开一个新的数据文件，
@@ -121,6 +154,6 @@ func (db *DB) initActiveFile() error {
 	return nil
 }
 
-func (db *DB) appendLogRecordPos(logRecordPos *data.LogRecordPos) (*data.LogRecordPos, error) {
-
-}
+//func (db *DB) appendLogRecordPos(logRecordPos *data.LogRecordPos) (*data.LogRecordPos, error) {
+//
+//}
