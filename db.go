@@ -49,6 +49,10 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	// 3.2 否则，从旧的数据文件中寻找
 	// 3.3 没有找到，报错
 
+	// 读取数据时，还应该加锁
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	if len(key) == 0 {
 		return nil, ErrKeyIsEmpty
 	}
@@ -74,7 +78,18 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	}
 
 	// 现在我们获取了对应的 dataFile 之后呢？
+	// 根据偏移量读取对应的数据
+	logRecord, err := dataFile.ReadLogRecord(pos.Offset)
+	if err != nil {
+		return nil, err
+	}
 
+	// 针对 LogRecord 还应进行一个类型判断
+	if logRecord.Type == data.LogRecordDeleted {
+		return nil, ErrKeyNotFound
+	}
+
+	return logRecord.Value, nil
 }
 
 // 追加写数据到活跃文件中

@@ -9,7 +9,7 @@ type DataFile struct {
 	IoManager fio.IoManager
 }
 
-// OpenDataFile 打开数据文件
+// OpenDataFile 打开数据文件，数据库其中时的方法
 func OpenDataFile(dirPath string, fileId uint32) (*DataFile, error) {
 	return nil, nil
 }
@@ -20,4 +20,8 @@ func (df *DataFile) Sync() error {
 
 func (df *DataFile) Write(buf []byte) error {
 	return nil
+}
+
+func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, error) {
+	return nil, nil
 }
