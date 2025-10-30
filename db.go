@@ -5,6 +5,9 @@ import (
 	"bitcask-go/index"
 	"errors"
 	"os"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -198,6 +201,54 @@ func (db *DB) initActiveFile() error {
 	}
 
 	db.activeFile = dataFile
+	return nil
+}
+
+// 从磁盘中加载数据文件
+func (db *DB) loadDataFile() error {
+	dirEntries, err := os.ReadDir(db.setup.DirPath)
+	if err != nil {
+		return err
+	}
+
+	var fileIds []int
+	// 遍历当前目录所有文件，并找到以 .data 后缀结尾的文件
+	for _, entry := range dirEntries {
+		// 如果是以 .data 结尾的话，需要对文件名进行分割
+		if strings.HasSuffix(entry.Name(), data.DataFileNameSuffix) {
+			// e.g. 当前文件为 001.data 文件，我们需要根据 "." 来分割，获取文件名 001 作为文件id
+			// 最后 Split函数之后返回的是 ["001", "data"]
+			splitNames := strings.Split(entry.Name(), ".")
+			fileId, err := strconv.Atoi(splitNames[0]) // 是不是将 string -> int 类型？
+			if err != nil {
+				return ErrDataDirectoryCorrupted
+			}
+
+			// 将文件 id 添加到我们的 fileId数组之中
+			fileIds = append(fileIds, fileId)
+		}
+	}
+
+	// 对文件 id 进行排序，从小到大进行依次加载
+	sort.Ints(fileIds)
+
+	// 遍历每个文件id，并打开对应的数据文件
+	// 如果有相同名称，但是不同后缀的文件，该怎么办呢？
+	for i, fid := range fileIds {
+		dataFile, err := data.OpenDataFile(db.setup.DirPath, uint32(fid))
+		if err != nil {
+			return err
+		}
+
+		// 遍历到最后的文件，也就是我们的活跃文件
+		if i == len(fileIds)-1 {
+			db.activeFile = dataFile
+		} else {
+			// 否则，添加到旧的数据文件之中
+			db.inactiveFile[uint32(fid)] = dataFile
+		}
+	}
+
 	return nil
 }
 
