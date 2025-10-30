@@ -2,6 +2,7 @@ package data
 
 import "bitcask-go/fio"
 
+// DataFile
 type DataFile struct {
 	FileId   uint32 // 当前文件id
 	WriteOff int64  // 当前文件写入到了哪个位置

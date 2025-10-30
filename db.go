@@ -154,6 +154,7 @@ func (db *DB) initActiveFile() error {
 	var initialFileId uint32 = 0
 	// 不为空，则递增 + 1
 	// 我还是不太理解，就是之前不是判断了吗，这里的活跃数据文件不一定是空吗？
+	// 是的，我也不是很理解...
 	if db.activeFile != nil {
 		initialFileId = db.activeFile.FileId + 1
 	}
