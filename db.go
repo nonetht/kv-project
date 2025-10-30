@@ -3,16 +3,47 @@ package bitcask_go
 import (
 	"bitcask-go/data"
 	"bitcask-go/index"
+	"errors"
+	"os"
 	"sync"
 )
 
 // DB 存储面向用户的操作接口
 type DB struct {
 	setup        Setup
-	mu           *sync.Mutex
+	mu           *sync.RWMutex
 	activeFile   *data.DataFile            // 当前活跃文件
 	inactiveFile map[uint32]*data.DataFile // 不活跃数据文件，也就是不活跃的数据文件。
 	index        index.Indexer             // 内存索引
+}
+
+// Open 打开 bitcask 存储引擎的方法
+func Open(setup Setup) (*DB, error) {
+	// 对用户传入的配置项进行校验
+	if err := checkOptions(setup); err != nil {
+		return nil, err
+	}
+
+	// 随后应该根据 setup 中的 DirPath 字段，打开对应的部分。
+	// 但是在这之前，还应校验，如果目录不存在，则创建一个新的目录
+	if _, err := os.Stat(setup.DirPath); os.IsNotExist(err) {
+		if err := os.Mkdir(setup.DirPath, os.ModePerm); err != nil {
+			return nil, err
+		}
+	}
+
+	db := &DB{
+		setup:        setup,
+		mu:           new(sync.RWMutex),
+		activeFile:   nil,
+		inactiveFile: make(map[uint32]*data.DataFile),
+		index:        index.NewIndexer(setup.IndexType),
+	}
+
+	// 加载数据文件
+	if err := db.loadDataFile(); err != nil {
+		return nil, err
+	}
 }
 
 // Put 用户写入 Key/Value 数据，key不能为空
@@ -170,6 +201,15 @@ func (db *DB) initActiveFile() error {
 	return nil
 }
 
-//func (db *DB) appendLogRecordPos(logRecordPos *data.LogRecordPos) (*data.LogRecordPos, error) {
-//
-//}
+// 对用户传入的配置项进行校验
+func checkOptions(setup Setup) error {
+	// 传入目录为空，直接返回一个错误
+	if setup.DirPath == "" {
+		return errors.New("dirPath is empty")
+	}
+
+	if setup.DataFileSize <= 0 {
+		return errors.New("database data file size must be greater than 0")
+	}
+	return nil
+}
