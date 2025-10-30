@@ -14,6 +14,27 @@ type Indexer interface {
 	Delete(key []byte) bool
 }
 
+// 用处在什么呢？我不是很理解了。
+type IndexType = int8
+
+const (
+	// Btree
+	Btree IndexType = iota + 1
+	// 自适应基数树
+	ART
+)
+
+func NewIndexer(typ IndexType) Indexer {
+	switch typ {
+	case Btree:
+		return NewBTree()
+	case ART:
+		return nil
+	default:
+		panic("unknown index type")
+	}
+}
+
 type Item struct {
 	key []byte
 	pos *data.LogRecordPos
