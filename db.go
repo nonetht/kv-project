@@ -4,6 +4,7 @@ import (
 	"bitcask-go/data"
 	"bitcask-go/index"
 	"errors"
+	"io"
 	"os"
 	"sort"
 	"strconv"
@@ -15,6 +16,7 @@ import (
 type DB struct {
 	setup        Setup
 	mu           *sync.RWMutex
+	fileIds      []int
 	activeFile   *data.DataFile            // 当前活跃文件
 	inactiveFile map[uint32]*data.DataFile // 不活跃数据文件，也就是不活跃的数据文件。
 	index        index.Indexer             // 内存索引
@@ -47,6 +49,19 @@ func Open(setup Setup) (*DB, error) {
 	if err := db.loadDataFile(); err != nil {
 		return nil, err
 	}
+
+	// 随后开始准备构建索引
+	/*
+		务必从小到大来遍历文件的 id，根据 id找到对应数据文件，可以写一个 for循环。
+		并且定义 offset 变量，表示读取到当前文件哪个位置。直接调用 ReadLogRecord 方法，拿到 LogRecord 即可
+		随后根据当前文件遍历的 id，以及offset，构建出内存索引信息 LogRecordPos，并将其存储到内存索引之中
+	*/
+
+	// 1. 从数据文件中，加载索引
+	if err := db.loadLogRecordPosFromDataFile(); err != nil {
+		return nil, err
+	}
+	return db, nil
 }
 
 // Put 用户写入 Key/Value 数据，key不能为空
@@ -113,7 +128,7 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 
 	// 现在我们获取了对应的 dataFile 之后呢？
 	// 根据偏移量读取对应的数据
-	logRecord, err := dataFile.ReadLogRecord(pos.Offset)
+	logRecord, _, err := dataFile.ReadLogRecord(pos.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -231,6 +246,7 @@ func (db *DB) loadDataFile() error {
 
 	// 对文件 id 进行排序，从小到大进行依次加载
 	sort.Ints(fileIds)
+	db.fileIds = fileIds
 
 	// 遍历每个文件id，并打开对应的数据文件
 	// 如果有相同名称，但是不同后缀的文件，该怎么办呢？
@@ -249,6 +265,61 @@ func (db *DB) loadDataFile() error {
 		}
 	}
 
+	return nil
+}
+
+// 从数据文件之中，加载索引。遍历文件的记录，更新到内存索引中
+func (db *DB) loadLogRecordPosFromDataFile() error {
+	// dataFile -> logRecord -> logRecordPos -> Put 到 Indexer之中
+
+	// 没有文件，说明是一个空的数据库
+	if len(db.fileIds) == 0 {
+		return nil
+	}
+
+	// 通过 db 中的 activeFile，inactiveFile获取的对应的 dataFile，而我们则是使用的 OpenDataFile
+	for i, fid := range db.fileIds {
+		var fileId = uint32(fid)
+		var dataFile *data.DataFile
+		if fileId == db.activeFile.FileId {
+			dataFile = db.activeFile
+		} else {
+			dataFile = db.inactiveFile[fileId]
+		}
+
+		var offset int64 = 0
+		for {
+			// 考虑到 offset，我们还要获取 logRecord的大小
+			logRecord, size, err := dataFile.ReadLogRecord(offset)
+			// 不能返回，就是如果到最后一个文件就是正常情况，其他情况则进行返回
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				return err
+			}
+
+			logRecordPos := &data.LogRecordPos{
+				Fid:    fileId,
+				Offset: offset,
+			}
+
+			// 如果为删除类型的话，则执行删除操作。
+			if logRecord.Type == data.LogRecordDeleted {
+				db.index.Delete(logRecord.Key)
+			}
+			db.index.Put(logRecord.Key, logRecordPos)
+
+			// 对 offset 进行递增操作
+			// TODO: 文件大小如何确定呢？
+			offset += size
+		}
+
+		if i == len(db.fileIds)-1 {
+			db.activeFile.WriteOff = offset
+		}
+
+	}
 	return nil
 }
 
