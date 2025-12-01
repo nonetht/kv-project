@@ -91,13 +91,6 @@ func (db *DB) Put(key []byte, value []byte) error {
 }
 
 func (db *DB) Get(key []byte) ([]byte, error) {
-	// 1. 根据key去内存索引中查找数据，如果没有找到，说明对应Key不存在，报错
-	// 2. 找到了，取出对应位置信息
-	// 3. 根据文件 id，去找到对应数据文件
-	// 3.1 如果是活跃文件，直接使用活跃文件
-	// 3.2 否则，从旧的数据文件中寻找
-	// 3.3 没有找到，报错
-
 	// 读取数据时，还应该加锁
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -141,7 +134,7 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	return logRecord.Value, nil
 }
 
-// 追加写数据到活跃文件中
+// 追加写数据到活跃文件中，为了避免竞态条件，应该加锁。
 func (db *DB) appendLogRecord(logRecord data.LogRecord) (*data.LogRecordPos, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -154,13 +147,15 @@ func (db *DB) appendLogRecord(logRecord data.LogRecord) (*data.LogRecordPos, err
 		}
 	}
 
-	// 首先将 LogRecord 进行编码为字节数组类型
+	// 首先将 LogRecord 进行编码为字节数组类型，
+	// TODO: 为什么要编码为直接数组类型？
 	encodedRecord, size := data.EncodeLogRecord(&logRecord)
 	// **判断**，超出预值的话：
 	// 1. 将现有的数据文件转换为旧的数据文件，即 activeFile -> inactiveFile
 	// 2. 打开一个新的数据文件，
 	if db.activeFile.WriteOff+size > db.setup.DataFileSize {
 		// 将当前活跃文件持久化，持久化到磁盘之中
+		// TODO: 比较好奇，所谓的持久化是个什么样子。
 		if err := db.activeFile.Sync(); err != nil {
 			return nil, err
 		}
@@ -174,7 +169,6 @@ func (db *DB) appendLogRecord(logRecord data.LogRecord) (*data.LogRecordPos, err
 		}
 	}
 
-	// 如果 logRecord 的 Type 是待删除类型呢？
 	writeOff := db.activeFile.WriteOff
 	if err := db.activeFile.Write(encodedRecord); err != nil {
 		return nil, err
@@ -193,17 +187,14 @@ func (db *DB) appendLogRecord(logRecord data.LogRecord) (*data.LogRecordPos, err
 		Offset: writeOff,
 	}
 	return pos, nil
-
 }
 
-// 初始化当前活跃文件
-// 在访问此方法前务必持有**互斥锁**
+// 初始化当前活跃文件，在访问此方法前务必持有**互斥锁**
+// TODO: 我个人理解，是创建一个新的文件，但是为什么是读取某个文件路径呢？由于 OpenDataFile 没有实现，我们无从得知
 func (db *DB) initActiveFile() error {
 	// 初始数据字段
 	var initialFileId uint32 = 0
-	// 不为空，则递增 + 1
-	// 我还是不太理解，就是之前不是判断了吗，这里的活跃数据文件不一定是空吗？
-	// 是的，我也不是很理解...
+	// 不为空，则在递增 + 1
 	if db.activeFile != nil {
 		initialFileId = db.activeFile.FileId + 1
 	}
@@ -221,6 +212,7 @@ func (db *DB) initActiveFile() error {
 
 // 从磁盘中加载数据文件
 func (db *DB) loadDataFile() error {
+	// 得到的有文件夹和文件，就是只选择带有 .data 后缀的文件。
 	dirEntries, err := os.ReadDir(db.setup.DirPath)
 	if err != nil {
 		return err
