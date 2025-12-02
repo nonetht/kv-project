@@ -330,11 +330,16 @@ func (db *DB) loadIndexFromDatafile() error {
 				Offset: offset, // 起始值就是 0
 			}
 
+			var ok bool // 定义 ok 变量，对结果进行检测
 			// 如果为删除类型的话，则执行删除操作。即从 db.index 将其删除
 			if logRecord.Type == data.LogRecordDeleted {
-				db.index.Delete(logRecord.Key)
+				ok = db.index.Delete(logRecord.Key)
+			} else {
+				ok = db.index.Put(logRecord.Key, logRecordPos)
 			}
-			db.index.Put(logRecord.Key, logRecordPos)
+			if !ok {
+				return ErrIndexUpdateFailed
+			}
 
 			// 对 offset 进行递增操作
 			offset += size
