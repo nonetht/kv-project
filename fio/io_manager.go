@@ -8,3 +8,8 @@ type IoManager interface {
 	Sync() error                     // 同步
 	Close() error                    // 关闭
 }
+
+// NewIoManager 初始化 IoManager，目前仅支持 FileIO
+func NewIoManager(fileName string) (IoManager, error) {
+	return NewFileIOManager(fileName)
+}
