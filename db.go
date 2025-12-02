@@ -90,6 +90,37 @@ func (db *DB) Put(key []byte, value []byte) error {
 	return nil
 }
 
+func (db *DB) Delete(key []byte) error {
+	// 判断key 有效性
+	if len(key) == 0 {
+		return ErrKeyIsEmpty
+	}
+
+	// 随后去内存索引查找一下，看key是否存在，如果不存在的话，直接返回
+	if pos := db.index.Get(key); pos != nil {
+		return nil
+	}
+
+	// 随后构造对应logRecord信息，然后写入到数据文件之中。
+	logRecord := &data.LogRecord{
+		Key:  key,
+		Type: data.LogRecordDeleted,
+	}
+
+	_, err := db.appendLogRecord(*logRecord)
+	if err != nil {
+		return err
+	}
+
+	// 随后将其从内存索引之中删除
+	ok := db.index.Delete(key)
+	if !ok {
+		return ErrIndexUpdateFailed
+	}
+
+	return nil
+}
+
 func (db *DB) Get(key []byte) ([]byte, error) {
 	// 读取数据时，还应该加锁
 	db.mu.Lock()
@@ -306,7 +337,6 @@ func (db *DB) loadIndexFromDatafile() error {
 			db.index.Put(logRecord.Key, logRecordPos)
 
 			// 对 offset 进行递增操作
-			// TODO: 文件大小如何确定呢？
 			offset += size
 		}
 
