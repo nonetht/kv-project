@@ -30,7 +30,7 @@ type LogRecordPos struct {
 	Offset int64
 }
 
-// EncodeLogRecord 对 LogRecod 进行编码，返回字节数组
+// EncodeLogRecord 对 LogRecord 进行编码，返回字节数组
 func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
 	return nil, 0
 }

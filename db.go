@@ -52,13 +52,13 @@ func Open(setup Setup) (*DB, error) {
 
 	// 随后开始准备构建索引
 	/*
-		务必从小到大来遍历文件的 id，根据 id找到对应数据文件，可以写一个 for循环。
+		务必从小到大来遍历文件的 id，根据 id 找到对应数据文件，可以写一个 for循环。
 		并且定义 offset 变量，表示读取到当前文件哪个位置。直接调用 ReadLogRecord 方法，拿到 LogRecord 即可
 		随后根据当前文件遍历的 id，以及offset，构建出内存索引信息 LogRecordPos，并将其存储到内存索引之中
 	*/
 
 	// 1. 从数据文件中，加载索引
-	if err := db.loadLogRecordPosFromDataFile(); err != nil {
+	if err := db.loadIndexFromDatafile(); err != nil {
 		return nil, err
 	}
 	return db, nil
@@ -111,8 +111,8 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	if db.activeFile.FileId == pos.Fid {
 		// 从 activeFile 之中寻找
 		dataFile = db.activeFile
-	} else if db.inactiveFile[pos.Fid] != nil {
 		// 反之，从 inactiveFile 这个map之中寻找
+	} else if db.inactiveFile[pos.Fid] != nil {
 		dataFile = db.inactiveFile[pos.Fid]
 	} else {
 		// 没有找到，则报错
@@ -210,7 +210,7 @@ func (db *DB) initActiveFile() error {
 	return nil
 }
 
-// 从磁盘中加载数据文件
+// 从磁盘中加载数据文件，就是填充 db 结构体 中的 activeFiles, inactiveFiles。
 func (db *DB) loadDataFile() error {
 	// 得到的有文件夹和文件，就是只选择带有 .data 后缀的文件。
 	dirEntries, err := os.ReadDir(db.setup.DirPath)
@@ -226,22 +226,22 @@ func (db *DB) loadDataFile() error {
 			// e.g. 当前文件为 001.data 文件，我们需要根据 "." 来分割，获取文件名 001 作为文件id
 			// 最后 Split函数之后返回的是 ["001", "data"]
 			splitNames := strings.Split(entry.Name(), ".")
-			fileId, err := strconv.Atoi(splitNames[0]) // 是不是将 string -> int 类型？
+			fileId, err := strconv.Atoi(splitNames[0]) // 是不是将 string -> int 类型？是的
 			if err != nil {
 				return ErrDataDirectoryCorrupted
 			}
 
-			// 将文件 id 添加到我们的 fileId数组之中
+			// 将文件 id 添加到我们的 fileId 数组之中
 			fileIds = append(fileIds, fileId)
 		}
 	}
 
 	// 对文件 id 进行排序，从小到大进行依次加载
 	sort.Ints(fileIds)
-	db.fileIds = fileIds
+	db.fileIds = fileIds // 将数组传递给 db 结构体之中的 fileIds 字段
 
-	// 遍历每个文件id，并打开对应的数据文件
-	// 如果有相同名称，但是不同后缀的文件，该怎么办呢？
+	// 遍历每个文件id，并打开对应的数据文件。
+	//TODO: 但是如果存在这么一种情况的话呢？就是一个文件为001.data,还有一个叫001.txt。就是相同名称，但是不同后缀的文件。
 	for i, fid := range fileIds {
 		dataFile, err := data.OpenDataFile(db.setup.DirPath, uint32(fid))
 		if err != nil {
@@ -261,8 +261,9 @@ func (db *DB) loadDataFile() error {
 }
 
 // 从数据文件之中，加载索引。遍历文件的记录，更新到内存索引中
-func (db *DB) loadLogRecordPosFromDataFile() error {
-	// dataFile -> logRecord -> logRecordPos -> Put 到 Indexer之中
+// 感觉该函数还是太臃肿了，非常庞大的一个 for 循环，如果有机会将其重构就好了。
+func (db *DB) loadIndexFromDatafile() error {
+	// dataFile -> logRecord -> logRecordPos -> Put 到 Indexer 之中
 
 	// 没有文件，说明是一个空的数据库
 	if len(db.fileIds) == 0 {
@@ -283,20 +284,22 @@ func (db *DB) loadLogRecordPosFromDataFile() error {
 		for {
 			// 考虑到 offset，我们还要获取 logRecord的大小
 			logRecord, size, err := dataFile.ReadLogRecord(offset)
-			// 不能返回，就是如果到最后一个文件就是正常情况，其他情况则进行返回
+			// 不能正常返回，但是如果到最后一个文件就是正常情况，其他情况则进行返回
 			if err != nil {
+				// 读取到了最后一个文件，正常情况
 				if err == io.EOF {
 					break
 				}
 				return err
 			}
 
+			// 先创建一个 logRecordPos
 			logRecordPos := &data.LogRecordPos{
 				Fid:    fileId,
-				Offset: offset,
+				Offset: offset, // 起始值就是 0
 			}
 
-			// 如果为删除类型的话，则执行删除操作。
+			// 如果为删除类型的话，则执行删除操作。即从 db.index 将其删除
 			if logRecord.Type == data.LogRecordDeleted {
 				db.index.Delete(logRecord.Key)
 			}
@@ -322,6 +325,7 @@ func checkOptions(setup Setup) error {
 		return errors.New("dirPath is empty")
 	}
 
+	// 数据文件大小如果 <= 0，也会报错
 	if setup.DataFileSize <= 0 {
 		return errors.New("database data file size must be greater than 0")
 	}

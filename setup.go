@@ -5,8 +5,8 @@ import "bitcask-go/index"
 type Setup struct {
 	DirPath      string // 数据库数据目录
 	DataFileSize int64
-	SyncWrites   bool
-	IndexType    index.IndexType
+	SyncWrites   bool            // 是否要每次写入后同步
+	IndexType    index.IndexType // 索引类型
 }
 
 type IndexerType = int8

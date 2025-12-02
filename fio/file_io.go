@@ -14,7 +14,7 @@ type FileIO struct {
 func NewFileIOManager(filePath string) (*FileIO, error) {
 	fd, err := os.OpenFile(
 		filePath,
-		os.O_CREATE|os.O_RDWR|os.O_APPEND,
+		os.O_CREATE|os.O_RDWR|os.O_APPEND, // ?
 		DataFilePerm,
 	)
 	if err != nil {

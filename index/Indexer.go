@@ -14,13 +14,11 @@ type Indexer interface {
 	Delete(key []byte) bool
 }
 
-// 用处在什么呢？我不是很理解了。
+// IndexType 用处在什么呢？我不是很理解了。
 type IndexType = int8
 
 const (
-	// Btree
 	Btree IndexType = iota + 1
-	// 自适应基数树
 	ART
 )
 
