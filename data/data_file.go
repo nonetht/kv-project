@@ -66,16 +66,16 @@ func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 	// TODO: 我不懂是为什么要加上该判断条件。
 	var headerBytes int64 = maxLogRecordHeaderSize
 	if offset+maxLogRecordHeaderSize > fileSize {
-		headerBytes = fileSize - offset
+		headerBytes = fileSize - offset // 实际上就是将剩下的一并读取
 	}
 
-	headerBuf, err := df.readNBytes(headerBytes, offset)
+	headerBuf, err := df.readNBytes(headerBytes, offset) // 一般情况下，headerBytes = 15；为了减少系统调用，先按照最大数量读取。
 	if err != nil {
 		return nil, 0, err
 	}
 
 	// 随后对 header 数组进行解码
-	header, headerSize := decodeLogRecordHeader(headerBuf)
+	header, headerSize := decodeLogRecordHeader(headerBuf) // 将 header 信息从切片之中提取出来
 	if header == nil {
 		// 标明读取到了文件的末尾，读取完毕返回 EOF
 		return nil, 0, io.EOF
@@ -91,8 +91,9 @@ func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 
 	logRecord := &LogRecord{Type: header.recordType}
 	// 随后根据 key，value 的长度，读取其中的key, value的信息
+	// 之所以使用 || 是因为会存在一些 key 非空，而 value 为空的情况。如果是采用 && 就会漏掉部分记录
 	if keySize > 0 || valueSize > 0 {
-		// 读取 key 和 value 长度的字节。（为什么呢，为什么不可以分开阅读呢？）
+		// 读取 key 和 value 长度的字节。（为什么呢，为什么不可以分开阅读呢？） -> 就是系统调用昂贵，减少；磁盘IO，多次读取会降低效率
 		// 读取的偏移是从 offset + headerSize 开始
 		kvBuf, err := df.readNBytes(keySize+valueSize, offset+headerSize)
 		if err != nil {
@@ -102,7 +103,8 @@ func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 		logRecord.Value = kvBuf[keySize:]
 	}
 
-	// 校验数据的有效性
+	// 校验数据的有效性，crc：循环冗余校验
+	// crc 校验值计算公式：CRC = Hash( HeaderBody + Key + Value )
 	// TODO: 读取到的是，最大的 header 信息？这里也是比较难的地方
 	crc := getLogRecordCRC(logRecord, headerBuf[crc32.Size:headerSize])
 	if crc != header.crc {
