@@ -2,6 +2,7 @@ package fio
 
 import "os"
 
+// TODO: 我不明白这是做什么的呢？
 const DataFilePerm = 0644
 
 // FileIO 结构体实现了 io_manager 接口，IoManager接口中所有方法最终都是对磁盘文件进行操作
@@ -14,7 +15,7 @@ type FileIO struct {
 func NewFileIOManager(filePath string) (*FileIO, error) {
 	fd, err := os.OpenFile(
 		filePath,
-		os.O_CREATE|os.O_RDWR|os.O_APPEND, // ?
+		os.O_CREATE|os.O_RDWR|os.O_APPEND, // ? 这是代表的什么意思呢？
 		DataFilePerm,
 	)
 	if err != nil {

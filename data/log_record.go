@@ -49,7 +49,12 @@ func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
 	return nil, 0
 }
 
-// 对字节数组中 Header 信息进行解码
+// 根据字节数组中 Header 信息进行解码，从而拿到 header 头部信息，并且返回 header 长度
 func decodeLogRecordHeader(buf []byte) (*logRecordHeader, int64) {
 	return nil, 0
+}
+
+// 我们需要同时获取其 logRecord 之中的key，value信息，以及 header 信息。
+func getLogRecordCRC(lr *LogRecord, header []byte) uint32 {
+	return 0
 }

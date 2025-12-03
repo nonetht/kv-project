@@ -7,6 +7,7 @@ type IoManager interface {
 	Write([]byte) (int, error)       // 写入
 	Sync() error                     // 同步
 	Close() error                    // 关闭
+	Size() (int64, error)            // 获取文件大小
 }
 
 // NewIoManager 初始化 IoManager，目前仅支持 FileIO
