@@ -2,9 +2,15 @@ package data
 
 import (
 	"bitcask-go/fio"
+	"errors"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"path/filepath"
+)
+
+var (
+	ErrInvalidCRC = errors.New("invalid crc value, log record maybe corrupted")
 )
 
 const DataFileNameSuffix = ".data"
@@ -33,10 +39,15 @@ func OpenDataFile(dirPath string, fileId uint32) (*DataFile, error) {
 }
 
 func (df *DataFile) Sync() error {
-	return nil
+	return df.IoManager.Sync()
 }
 
 func (df *DataFile) Write(buf []byte) error {
+	n, err := df.IoManager.Write(buf)
+	if err != nil {
+		return err
+	}
+	df.WriteOff += int64(n)
 	return nil
 }
 
@@ -46,14 +57,27 @@ func (df *DataFile) Write(buf []byte) error {
 // TODO: 说实话，我感觉我什么不能单独创建一个函数来求取 LogRecord 的大小呢？
 // 确实，其实我也考虑过，就是用单独的函数来做，是不是更好呢？
 func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
-	headerBuf, err := df.readNBytes(maxLogRecordHeaderSize, offset)
+	fileSize, err := df.IoManager.Size()
 	if err != nil {
 		return nil, 0, err
 	}
 
+	// 如果读取的最大 header 长度超过文件的长度，这只需要读取到文件的末尾即可。
+	// TODO: 我不懂是为什么要加上该判断条件。
+	var headerBytes int64 = maxLogRecordHeaderSize
+	if offset+maxLogRecordHeaderSize > fileSize {
+		headerBytes = fileSize - offset
+	}
+
+	headerBuf, err := df.readNBytes(headerBytes, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// 随后对 header 数组进行解码
 	header, headerSize := decodeLogRecordHeader(headerBuf)
 	if header == nil {
-		// 标明读取到了文件的末尾
+		// 标明读取到了文件的末尾，读取完毕返回 EOF
 		return nil, 0, io.EOF
 	}
 	// 同样表示，也是读取到文件末尾，返回 EOF
@@ -63,15 +87,38 @@ func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 
 	// 取出对应的 key 和 value 的长度
 	keySize, valueSize := int64(header.keySize), int64(header.valueSize)
-	var logrecordSize =
+	var logRecordSize = headerSize + keySize + valueSize
 
-	return nil, 0, nil
+	logRecord := &LogRecord{Type: header.recordType}
+	// 随后根据 key，value 的长度，读取其中的key, value的信息
+	if keySize > 0 || valueSize > 0 {
+		// 读取 key 和 value 长度的字节。（为什么呢，为什么不可以分开阅读呢？）
+		// 读取的偏移是从 offset + headerSize 开始
+		kvBuf, err := df.readNBytes(keySize+valueSize, offset+headerSize)
+		if err != nil {
+			return nil, 0, err
+		}
+		logRecord.Key = kvBuf[:keySize]
+		logRecord.Value = kvBuf[keySize:]
+	}
+
+	// 校验数据的有效性
+	// TODO: 读取到的是，最大的 header 信息？这里也是比较难的地方
+	crc := getLogRecordCRC(logRecord, headerBuf[crc32.Size:headerSize])
+	if crc != header.crc {
+		return nil, 0, ErrInvalidCRC
+	}
+	return logRecord, logRecordSize, nil
 }
 
-// 读取 n 个字节。
-// TODO: 但是其中返回值为什么是切片和err呢？我观察到 Read 函数是返回的数量，返回的 b 只是一个空切片啊！
+// 从数据文件的指定偏移量offset处，读取n个字节的数据，并将其作为字节切片返回。
+// TODO: 难点，就在于理解其中 os.ReadAt 函数！
 func (df *DataFile) readNBytes(n int64, offset int64) (b []byte, err error) {
 	b = make([]byte, n)                   // 创建长度为 n，类型为 byte 的切片
 	_, err = df.IoManager.Read(b, offset) // 通过 df.IoManager 执行 Read 函数: 就是在offset偏移量之后，读取 len(b) 的字节数目
 	return
+}
+
+func (df *DataFile) Close() error {
+	return df.IoManager.Close()
 }
