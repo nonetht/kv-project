@@ -47,7 +47,7 @@ type logRecordHeader struct {
 	valueSize  uint32        // value 大小
 }
 
-// EncodeLogRecord 对 LogRecord 进行编码，返回字节数组
+// EncodeLogRecord 对 LogRecord 进行编码，返回字节数组以及其长度
 // +--------------+-----------+---------------+---------------+--------+--------+
 // |                     LogRecordHeader部分                   |   LogRecord内容 |
 // +--------------+-----------+---------------+---------------+--------+--------+
@@ -81,8 +81,11 @@ func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
 
 	// crc 校验，Go之中自带该方法，可以直接调用
 	crc := crc32.ChecksumIEEE(encodedBytes[4:]) // 最终返回的是 uint32 类型，如何将其转换为 []byte 类型呢？
+	// 小端序，大端序....(这里使用BigEndian可以吗？)
+	// PutUint32 涉及到移位运算...
+	binary.LittleEndian.PutUint32(header[:4], crc)
 
-	return nil, 0
+	return encodedBytes, int64(size)
 }
 
 // 根据字节数组中 Header 信息进行解码，从而拿到 header 头部信息，并且返回 header 长度
