@@ -25,8 +25,9 @@ type DataFile struct {
 
 // OpenDataFile 打开数据文件
 func OpenDataFile(dirPath string, fileId uint32) (*DataFile, error) {
+	// fileName = filePath + fileName + Suffix
 	fileName := filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+DataFileNameSuffix)
-	// 初始化 IOManager 管理器接口
+	// 初始化 IOManager 管理器接口；同时也是下面这行代码实现了，即便不存在的名称也可以被创建。
 	ioManager, err := fio.NewIoManager(fileName)
 	if err != nil {
 		return nil, err

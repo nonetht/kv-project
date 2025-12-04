@@ -15,7 +15,10 @@ type FileIO struct {
 func NewFileIOManager(filePath string) (*FileIO, error) {
 	fd, err := os.OpenFile(
 		filePath,
-		os.O_CREATE|os.O_RDWR|os.O_APPEND, // ? 这是代表的什么意思呢？
+		// os.O_CREATE: 如果文件不存在，创建它
+		// os.O_RDWR: 以读写模式打开文件
+		// os.O_APPEND: 写数据时，始终追加到文件末尾（追加写操作）
+		os.O_CREATE|os.O_RDWR|os.O_APPEND,
 		DataFilePerm,
 	)
 	if err != nil {
