@@ -110,10 +110,21 @@ func decodeLogRecordHeader(buf []byte) (*logRecordHeader, int64) {
 	valueSize, n := binary.Varint(buf[index:])
 	header.valueSize = uint32(valueSize)
 	index += n
+
 	return header, int64(index)
 }
 
 // 我们需要同时获取其 logRecord 之中的key，value信息，以及 header 信息。
 func getLogRecordCRC(lr *LogRecord, header []byte) uint32 {
-	return 0
+	if lr == nil {
+		return 0
+	}
+
+	// TODO: 这里参数为什么是 header[:] 而不是 header 呢？
+	crc := crc32.ChecksumIEEE(header[:])
+
+	crc = crc32.Update(crc, crc32.IEEETable, lr.Key)
+	crc = crc32.Update(crc, crc32.IEEETable, lr.Value)
+
+	return crc
 }
