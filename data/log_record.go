@@ -101,8 +101,9 @@ func decodeLogRecordHeader(buf []byte) (*logRecordHeader, int64) {
 	}
 
 	var index = 5
-	// 取出 keySize，
-	// TODO: 但是我还是不理解，就是 size 都是变长的，为什么可以直接读取出 keySize 呢？
+	// 取出 keySize，以及valueSize
+	// 但是我还是不理解，就是 size 都是变长的，为什么可以直接读取出 keySize 呢？
+	// 其实就是，内存之中的字节有8位，最高位0,1代表不同意思（1表示数据还没完，继续读下一个字节；0表示该数字最后一个字节，读完就停下。）
 	keySize, n := binary.Varint(buf[index:])
 	header.keySize = uint32(keySize) // 给结构体之中的 keySize 字段赋值
 	index += n
