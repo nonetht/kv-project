@@ -67,24 +67,25 @@ func TestDataFile_Sync(t *testing.T) {
 }
 
 func TestDataFile_ReadLogRecord(t *testing.T) {
-	dataFile, err := OpenDataFile(os.TempDir(), 222)
+	// 使用专门的方法 t.TempDir()。会为每一次测试运行创建一个全新的、独立的、随机的临时目录
+	tmpDir := t.TempDir()
+	dataFile, err := OpenDataFile(tmpDir, 222) // os.TempDir()路径在: /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/
 	assert.Nil(t, err)
 	assert.NotNil(t, dataFile)
 
 	// 只有一条 LogRecord
 	rec1 := &LogRecord{
 		Key:   []byte("name"),
-		Value: []byte("bitcask-go"),
-		Type:  LogRecordNormal,
+		Value: []byte("bitcask kv go"),
 	}
 
-	// 一旦涉及到 DataFile 我就开始有点不太理解...
+	// 将 rec1 编码，随后写入到 dataFile 之中
 	res1, size1 := EncodeLogRecord(rec1)
 	err = dataFile.Write(res1)
 	assert.Nil(t, err)
 
 	// readSize1 就是 LogRecord 的总长度
-	readRec1, readSize1, err := dataFile.ReadLogRecord(0)
+	readRec1, readSize1, err := dataFile.ReadLogRecord(0) // 随后我们从起始位置（offset=0）开始读取数据
 	assert.Nil(t, err)
 	assert.Equal(t, rec1, readRec1)
 	assert.Equal(t, size1, readSize1)
