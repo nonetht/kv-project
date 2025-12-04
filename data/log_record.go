@@ -89,8 +89,28 @@ func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
 }
 
 // 根据字节数组中 Header 信息进行解码，从而拿到 header 头部信息，并且返回 header 长度
+// 是不是其中的 buf 存储的 header 字节数组呢？
 func decodeLogRecordHeader(buf []byte) (*logRecordHeader, int64) {
-	return nil, 0
+	if len(buf) < 5 {
+		return nil, 0
+	}
+
+	header := &logRecordHeader{
+		crc:        binary.LittleEndian.Uint32(buf[:4]),
+		recordType: buf[4],
+	}
+
+	var index = 5
+	// 取出 keySize，
+	// TODO: 但是我还是不理解，就是 size 都是变长的，为什么可以直接读取出 keySize 呢？
+	keySize, n := binary.Varint(buf[index:])
+	header.keySize = uint32(keySize) // 给结构体之中的 keySize 字段赋值
+	index += n
+
+	valueSize, n := binary.Varint(buf[index:])
+	header.valueSize = uint32(valueSize)
+	index += n
+	return header, int64(index)
 }
 
 // 我们需要同时获取其 logRecord 之中的key，value信息，以及 header 信息。
