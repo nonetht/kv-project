@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TODO: 关键就是 EncodeLogRecord 也是错误！测试覆盖根本就不行，还是忽略了。
 func TestEncodeLogRecord(t *testing.T) {
 	// 正常情况
 	rec1 := &LogRecord{

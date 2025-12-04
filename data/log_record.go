@@ -79,11 +79,11 @@ func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
 	copy(encodedBytes[index:], logRecord.Key)
 	copy(encodedBytes[index+len(logRecord.Key):], logRecord.Value)
 
-	// crc 校验，Go之中自带该方法，可以直接调用
+	// crc 校验，Go之中自带该方法，可以直接调用。其中crc校验值的计算需要：type，key,value的Size以及key,value的实际值
 	crc := crc32.ChecksumIEEE(encodedBytes[4:]) // 最终返回的是 uint32 类型，如何将其转换为 []byte 类型呢？
 	// 小端序，大端序....(这里使用BigEndian可以吗？)
-	// PutUint32 涉及到移位运算...
-	binary.LittleEndian.PutUint32(header[:4], crc)
+	// PutUint32 涉及到移位运算...其中是 crc 的值添加到 encodedBytes[0:4]
+	binary.LittleEndian.PutUint32(encodedBytes, crc) // TODO: 这里出现问题，我们写成了，header[:4]
 
 	return encodedBytes, int64(size)
 }

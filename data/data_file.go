@@ -70,6 +70,7 @@ func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 		headerBytes = fileSize - offset // 实际上就是将剩下的一并读取
 	}
 
+	// headerBuf 有问题，导致的 decode 函数返回结果也有问题。
 	headerBuf, err := df.readNBytes(headerBytes, offset) // 一般情况下，headerBytes = 15；为了减少系统调用，先按照最大数量读取。
 	if err != nil {
 		return nil, 0, err
@@ -119,6 +120,9 @@ func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 func (df *DataFile) readNBytes(n int64, offset int64) (b []byte, err error) {
 	b = make([]byte, n)                   // 创建长度为 n，类型为 byte 的切片
 	_, err = df.IoManager.Read(b, offset) // 通过 df.IoManager 执行 Read 函数: 就是在offset偏移量之后，读取 len(b) 的字节数目
+	if err != nil {
+		return nil, err
+	}
 	return
 }
 
