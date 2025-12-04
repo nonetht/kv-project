@@ -1,6 +1,9 @@
 package data
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"hash/crc32"
+)
 
 type LogRecordType = byte
 
@@ -53,6 +56,32 @@ type logRecordHeader struct {
 // | 4字节        | 1字节      | 变长(最大5)    | 变长(最大5)     | 变长   | 变长    |
 // +--------------+-----------+---------------+---------------+--------+--------+
 func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
+	// 初始化一个 header 部分的字节数组，随后将 header 的字段部分转换为 []byte （字节数组）
+	header := make([]byte, maxLogRecordHeaderSize)
+
+	// 第五个字节存储 Type
+	header[4] = logRecord.Type
+	var index = 5
+	// 下标为5字节之后，存储到是key，value的长度信息
+	// binary 包，存储变长顺序；同时，binary.PutVarint 方法会返回写入了多少个字节，因此需要对index进行递增
+	index += binary.PutVarint(header[index:], int64(len(logRecord.Key)))   // header[index:] -> 表示从下标 index 开始
+	index += binary.PutVarint(header[index:], int64(len(logRecord.Value))) // header[index:] -> 表示从下标 index 开始
+
+	// 最后编码的长度，就是如此：header 长度，Key 长度以及 Value 长度
+	var size = index + len(logRecord.Key) + len(logRecord.Value)
+	encodedBytes := make([]byte, size)
+
+	// 于是我们又获得了一个更大的数组（bigger one），接下来是将 header 部分拷贝进来
+	// copy -> func copy(dst, src []Type) int
+	copy(encodedBytes[:index], header[:index]) // 将 header 拷贝到 encodedBytes
+
+	// 将 key 和 value 拷贝到字节数组之中，这里注意长度大小的问题。
+	copy(encodedBytes[index:], logRecord.Key)
+	copy(encodedBytes[index+len(logRecord.Key):], logRecord.Value)
+
+	// crc 校验，Go之中自带该方法，可以直接调用
+	crc := crc32.ChecksumIEEE(encodedBytes[4:]) // 最终返回的是 uint32 类型，如何将其转换为 []byte 类型呢？
+
 	return nil, 0
 }
 
