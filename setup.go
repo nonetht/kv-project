@@ -1,6 +1,9 @@
 package bitcask_go
 
-import "bitcask-go/index"
+import (
+	"bitcask-go/index"
+	"os"
+)
 
 type Setup struct {
 	DirPath      string // 数据库数据目录
@@ -18,3 +21,10 @@ const (
 	// ART Adpative Radix Tree
 	ART
 )
+
+var DefaultSetup = Setup{
+	DirPath:      os.TempDir(),
+	DataFileSize: 256 * 1024 * 1024, // 256 MB
+	SyncWrites:   false,
+	IndexType:    BTree,
+}
