@@ -9,7 +9,7 @@ import (
 )
 
 // 测试完成之后，销毁 DB 数据目录
-// 为 destoryDB添加了活跃文件空指针保护。空目录打开时，activeFile为空不再出发panic。
+// 为 destoryDB 添加了活跃文件空指针保护。空目录打开时，activeFile为空不再出发panic。
 func destroyDB(db *DB) {
 	if db != nil {
 		if db.activeFile != nil {
@@ -40,6 +40,7 @@ func TestOpen(t *testing.T) {
 func TestDB_Put(t *testing.T) {
 	setup := DefaultSetup
 	dir, _ := os.MkdirTemp("", "bitcask-go-put")
+	t.Log(dir)
 	setup.DirPath = dir
 	setup.DataFileSize = 64 * 1024 * 1024
 	// 根据数据库配置 setup，Open一个数据库
@@ -49,10 +50,10 @@ func TestDB_Put(t *testing.T) {
 	assert.NotNil(t, db)
 
 	/*
-			其测试流程大致相同，不同地方也就是 Put 的数据略有不同。相同地方在于：
-			1. 对 Put 后的返回值进行检查，看反复的 err 是否为空
-			2. 同时，对 db 执行 Get 操作，涉及到的 key 相同
-			3. 最后对返回值进行校验
+		其测试流程大致相同，不同地方也就是 Put 的数据略有不同。相同地方在于：
+		1. 对 Put 后的返回值进行检查，看反复的 err 是否为空
+		2. 同时，对 db 执行 Get 操作，涉及到的 key 相同
+		3. 最后对返回值进行校验
 		因此，可以将这些重复部分抽象为一个函数 ———— checkPutResult
 	*/
 
@@ -81,6 +82,37 @@ func TestDB_Put(t *testing.T) {
 		err = db.Put(utils.GetTestKey(1), []byte(""))
 		checkPutResult(t, err, db)
 	})
+
+	// 5. 写到数据文件进行了转换
+	// TODO: 我说好奇的是，为什么会有这种数字 1000000 如何得到的呢？
+	t.Run("Put ...", func(t *testing.T) {
+		for i := 0; i < 1000000; i++ {
+			err := db.Put(utils.GetTestKey(i), utils.RandomValue(128))
+			assert.Nil(t, err)
+		}
+		assert.Equal(t, 2, len(db.inactiveFile))
+	})
+
+	// 6. 重启后，Put 数据
+	t.Run("After reset, Put data", func(t *testing.T) {
+		err = db.activeFile.Close()
+		assert.Nil(t, err)
+
+		// 重启数据库
+		db2, err := Open(setup)
+		assert.Nil(t, err)
+		assert.NotNil(t, db2)
+		err = db2.Put(utils.GetTestKey(55), utils.RandomValue(128))
+		assert.Nil(t, err)
+	})
+}
+
+func TestDB_Get(t *testing.T) {
+
+}
+
+func TestDB_Delete(t *testing.T) {
+
 }
 
 func checkPutResult(t *testing.T, err error, db *DB) {
