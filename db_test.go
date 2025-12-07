@@ -22,6 +22,11 @@ func destroyDB(db *DB) {
 	}
 }
 
+/*
+我之前接触过，根据测试驱动的方式来学习Go语言，我在想是否可以将这些测试更精简，将部分代码抽象为函数。此外就是，
+将测试之中的case分为不同部分来执行，这样可以让整个测试更条理论！而不是从头到尾简单的代码执行。
+*/
+
 func TestOpen(t *testing.T) {
 	setup := DefaultSetup
 	dir, _ := os.MkdirTemp("", "bitcask-go")
@@ -43,25 +48,45 @@ func TestDB_Put(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, db)
 
+	/*
+			其测试流程大致相同，不同地方也就是 Put 的数据略有不同。相同地方在于：
+			1. 对 Put 后的返回值进行检查，看反复的 err 是否为空
+			2. 同时，对 db 执行 Get 操作，涉及到的 key 相同
+			3. 最后对返回值进行校验
+		因此，可以将这些重复部分抽象为一个函数 ———— checkPutResult
+	*/
+
 	// 1.正常Put一条数据
-	err = db.Put(utils.GetTestKey(1), utils.RandomValue(24))
+	t.Run("Put one kv pair", func(t *testing.T) {
+		err = db.Put(utils.GetTestKey(1), utils.RandomValue(24))
+		checkPutResult(t, err, db)
+	})
+
+	// 2. 重复 Put key 相同的数据
+	// TODO: 如果是重复写入的话，是不是也不会对之前写入的键值对造成影响呢？
+	t.Run("Put 2 same key", func(t *testing.T) {
+		err = db.Put(utils.GetTestKey(1), utils.RandomValue(24))
+		checkPutResult(t, err, db)
+	})
+
+	// 3. key 为空
+	t.Run("Put empty key", func(t *testing.T) {
+		err = db.Put([]byte(""), utils.RandomValue(24)) // key 为空的话，肯定会报错的
+		assert.NotNil(t, err)
+		//t.Log(err) // key is empty
+	})
+
+	// 4. value 为空的情况。value为空的话，是可以正常添加的。
+	t.Run("Put empty value", func(t *testing.T) {
+		err = db.Put(utils.GetTestKey(1), []byte(""))
+		checkPutResult(t, err, db)
+	})
+}
+
+func checkPutResult(t *testing.T, err error, db *DB) {
+	t.Helper() // 告诉测试框架，该方法是一个辅助函数。测试失败的话，报告行号指向调用函数地方而非测试辅助函数内部。
 	assert.Nil(t, err)
 	normalVal, err := db.Get(utils.GetTestKey(1))
 	assert.Nil(t, err)
 	assert.NotNil(t, normalVal)
-
-	// 2. 重复 Put key 相同的数据
-	// TODO: 如果是重复写入的话，是不是也不会对之前写入的键值对造成影响呢？
-	err = db.Put(utils.GetTestKey(1), utils.RandomValue(24))
-	assert.Nil(t, err)
-	duplicateVal, err := db.Get(utils.GetTestKey(1))
-	assert.Nil(t, err)
-	assert.NotNil(t, duplicateVal)
-
-	// 3. key 为空
-	err = db.Put([]byte(""), utils.RandomValue(24)) // key 为空的话，肯定会报错的
-	assert.NotNil(t, err)
-	//t.Log(err) // key is empty
-
-	// 4. value 为空
 }
