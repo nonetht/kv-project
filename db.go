@@ -64,7 +64,7 @@ func Open(setup Setup) (*DB, error) {
 	return db, nil
 }
 
-// Put 用户写入 Key/Value 数据，key不能为空
+// Put 用户写入 Key/Value 数据到活跃文件之中，key不能为空
 func (db *DB) Put(key []byte, value []byte) error {
 	if len(key) == 0 {
 		return ErrKeyIsEmpty
@@ -96,8 +96,8 @@ func (db *DB) Delete(key []byte) error {
 		return ErrKeyIsEmpty
 	}
 
-	// 随后去内存索引查找一下，看key是否存在，如果不存在的话，直接返回
-	if pos := db.index.Get(key); pos != nil {
+	// 去内存索引查找一下，看key是否存在，如果不存在的话，直接返回
+	if pos := db.index.Get(key); pos == nil {
 		return nil
 	}
 
@@ -163,6 +163,30 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	}
 
 	return logRecord.Value, nil
+}
+
+// Close 关闭数据库，清理并释放相关资源
+func (db *DB) Close() error {
+	if db == nil {
+		return nil
+	}
+
+	// 还是要有加锁、解锁的内容
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	// 关闭当前活跃文件
+	if err := db.activeFile.Close(); err != nil {
+		return err
+	}
+
+	// 不活跃文件如何关闭呢？inactiveFile 的类型是 map[uint32]*data.DataFile。即 uint32 - *data.DataFile
+	// 应该就是遍历 inactiveFile 这个映射，然后执行 Close() 函数
+	for _, file := range db.inactiveFile {
+		if err := file.Close(); err != nil {
+			return err
+		}
+	}
 }
 
 // 追加写数据到活跃文件中，为了避免竞态条件，应该加锁。
