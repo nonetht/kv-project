@@ -44,7 +44,7 @@ func TestDB_Put(t *testing.T) {
 	setup.DirPath = dir
 	setup.DataFileSize = 64 * 1024 * 1024
 	// 根据数据库配置 setup，Open一个数据库
-	db, err := Open(setup)
+	db, err := Open(setup) // db 是一个全部测试都可以造成影响的变量
 	defer destroyDB(db)
 	assert.Nil(t, err)
 	assert.NotNil(t, db)
@@ -94,6 +94,8 @@ func TestDB_Put(t *testing.T) {
 	})
 
 	// 6. 重启后，Put 数据
+	// TODO: 单独启动测试，就无法通过。但是统一执行测试，就可以通过，为什么呢？
+	// 父测试下多个子测试默认：顺序执行，逻辑独立。一个子测试的失败，不影响下一个子测试的启动。
 	t.Run("After reset, Put data", func(t *testing.T) {
 		err = db.activeFile.Close()
 		assert.Nil(t, err)
@@ -112,7 +114,42 @@ func TestDB_Get(t *testing.T) {
 }
 
 func TestDB_Delete(t *testing.T) {
+	setup := DefaultSetup
+	dir, _ := os.MkdirTemp("", "bitcask-go-delete")
+	setup.DirPath = dir
+	setup.DataFileSize = 64 * 1024 * 1024
+	db, err := Open(setup)
+	defer destroyDB(db)
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
 
+	// 1. 正常删除一个存在的 Key
+	err = db.Put(utils.GetTestKey(11), utils.RandomValue(128))
+	assert.Nil(t, err)
+	err = db.Delete(utils.GetTestKey(11))
+	assert.Nil(t, err)
+	_, err = db.Get(utils.GetTestKey(11)) // 已经不存在 key 为11的，那么再去寻找便会报错：ErrKeyNotFound
+	assert.Equal(t, ErrKeyNotFound, err)
+
+	// 2. 删除一个不存在的 Key
+	//err = db.Delete([]byte("unknown key"))
+	//assert.Nil(t, err)
+
+	// 3. 删除一个空的 Key
+	//err = db.Delete(nil)
+	//assert.Equal(t, ErrKeyIsEmpty, err)
+
+	// 4. 值被删除之后重新 Put
+	//err = db.Put(utils.GetTestKey(22), utils.RandomValue(128))
+	//assert.Nil(t, err)
+	//err = db.Delete(utils.GetTestKey(22))
+	//assert.Nil(t, err)
+	//
+	//err = db.Put(utils.GetTestKey(22), utils.RandomValue(128))
+	//assert.Nil(t, err)
+	//val, err := db.Get(utils.GetTestKey(22))
+	//assert.NotNil(t, val)
+	//assert.Nil(t, val)
 }
 
 func checkPutResult(t *testing.T, err error, db *DB) {
