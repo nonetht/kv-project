@@ -61,6 +61,14 @@ func (bt *BTree) Delete(key []byte) bool {
 	return true
 }
 
+func (bt *BTree) Iterator(reverse bool) Iterator {
+	bt.mu.RLock()
+	defer bt.mu.RUnlock()
+
+	// 基于当前快照构建迭代器，外部迭代无需持有锁
+	return newBTreeIterator(bt.btree, reverse)
+}
+
 // BTree 索引迭代器
 type btreeIterator struct {
 	currIndex int     // 当前遍历的下标位置
@@ -70,10 +78,11 @@ type btreeIterator struct {
 
 // 新建 BTreeIterator，b树迭代器
 func newBTreeIterator(tree *btree.BTree, reverse bool) *btreeIterator {
-	var idx int // 初始值为0
-	values := make([]*Item, tree.Len())
+	var idx int                         // 初始值为0
+	values := make([]*Item, tree.Len()) // tree.Len() 返回树之中 Item 的数量
 
-	// 将所有的数据存放到数组中
+	// 将所有的数据存放到数组中，但是其中没有循环，如何实现将*所有*数据放入的呢？
+	// saveValues 是一个函数！后续的 Descend/Ascend 函数会不断调用 saveValues 函数
 	saveValues := func(it btree.Item) bool {
 		values[idx] = it.(*Item) // ?
 		idx++
@@ -82,7 +91,7 @@ func newBTreeIterator(tree *btree.BTree, reverse bool) *btreeIterator {
 
 	if reverse {
 		// 从大到小
-		tree.Descend(saveValues)
+		tree.Descend(saveValues) // Descend 函数不断调用函数 saveValues，直到其返回 false
 	} else {
 		// 从小到大
 		tree.Ascend(saveValues)
@@ -95,10 +104,13 @@ func newBTreeIterator(tree *btree.BTree, reverse bool) *btreeIterator {
 	}
 }
 
+// Rewind 重新回到迭代器的起点
 func (b *btreeIterator) Rewind() {
 	b.currIndex = 0
 }
 
+// Seek 根据传入的 key 查找到第一个大于等于的 key 的*索引*
+// TODO: 没有看懂 Seek 函数的内容，我也很敬佩作者是从哪里找到的这些函数 —— sort.Search
 func (b *btreeIterator) Seek(key []byte) {
 	if b.reverse {
 		b.currIndex = sort.Search(len(b.values), func(i int) bool {
@@ -111,6 +123,7 @@ func (b *btreeIterator) Seek(key []byte) {
 	}
 }
 
+// Next 跳转到下一个 key
 func (b *btreeIterator) Next() {
 	b.currIndex++
 }
