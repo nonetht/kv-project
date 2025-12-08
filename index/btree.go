@@ -58,3 +58,45 @@ func (bt *BTree) Delete(key []byte) bool {
 	}
 	return true
 }
+
+// BTree 索引迭代器
+type btreeIterator struct {
+	currIndex int     // 当前遍历的下标位置
+	reverse   bool    // 是否是一个反向遍历
+	values    []*Item // key+位置索引信息
+}
+
+func (b *btreeIterator) Rewind() {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (b *btreeIterator) Seek(key []byte) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (b *btreeIterator) Next() {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (b *btreeIterator) Valid() bool {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (b *btreeIterator) Key() []byte {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (b *btreeIterator) Value() *data.LogRecordPos {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (b *btreeIterator) Close() {
+	//TODO implement me
+	panic("implement me")
+}
