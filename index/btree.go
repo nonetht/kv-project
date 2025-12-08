@@ -2,6 +2,8 @@ package index
 
 import (
 	"bitcask-go/data"
+	"bytes"
+	"sort"
 	"sync"
 
 	"github.com/google/btree"
@@ -66,37 +68,66 @@ type btreeIterator struct {
 	values    []*Item // key+位置索引信息
 }
 
+// 新建 BTreeIterator，b树迭代器
+func newBTreeIterator(tree *btree.BTree, reverse bool) *btreeIterator {
+	var idx int // 初始值为0
+	values := make([]*Item, tree.Len())
+
+	// 将所有的数据存放到数组中
+	saveValues := func(it btree.Item) bool {
+		values[idx] = it.(*Item) // ?
+		idx++
+		return true // 返回 false 会终止遍历，但是我也没有执行遍历...
+	}
+
+	if reverse {
+		// 从大到小
+		tree.Descend(saveValues)
+	} else {
+		// 从小到大
+		tree.Ascend(saveValues)
+	}
+
+	return &btreeIterator{
+		currIndex: 0,
+		reverse:   reverse,
+		values:    values,
+	}
+}
+
 func (b *btreeIterator) Rewind() {
-	//TODO implement me
-	panic("implement me")
+	b.currIndex = 0
 }
 
 func (b *btreeIterator) Seek(key []byte) {
-	//TODO implement me
-	panic("implement me")
+	if b.reverse {
+		b.currIndex = sort.Search(len(b.values), func(i int) bool {
+			return bytes.Compare(b.values[i].key, key) <= 0
+		})
+	} else {
+		b.currIndex = sort.Search(len(b.values), func(i int) bool {
+			return bytes.Compare(b.values[i].key, key) >= 0
+		})
+	}
 }
 
 func (b *btreeIterator) Next() {
-	//TODO implement me
-	panic("implement me")
+	b.currIndex++
 }
 
+// Valid 判断当前指针是否超过了数组长度
 func (b *btreeIterator) Valid() bool {
-	//TODO implement me
-	panic("implement me")
+	return b.currIndex < len(b.values)
 }
 
 func (b *btreeIterator) Key() []byte {
-	//TODO implement me
-	panic("implement me")
+	return b.values[b.currIndex].key
 }
 
 func (b *btreeIterator) Value() *data.LogRecordPos {
-	//TODO implement me
-	panic("implement me")
+	return b.values[b.currIndex].pos
 }
 
 func (b *btreeIterator) Close() {
-	//TODO implement me
-	panic("implement me")
+	b.values = nil
 }
