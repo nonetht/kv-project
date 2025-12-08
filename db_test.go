@@ -129,27 +129,27 @@ func TestDB_Delete(t *testing.T) {
 	err = db.Delete(utils.GetTestKey(11))
 	assert.Nil(t, err)
 	_, err = db.Get(utils.GetTestKey(11)) // 已经不存在 key 为11的，那么再去寻找便会报错：ErrKeyNotFound
-	assert.Equal(t, ErrKeyNotFound, err)
+	assert.Equal(t, ErrKeyNotFound, err)  // TODO: 返回的错误也是一样的。为什么这里无法通过测试呢？
 
 	// 2. 删除一个不存在的 Key
-	//err = db.Delete([]byte("unknown key"))
-	//assert.Nil(t, err)
+	err = db.Delete([]byte("unknown key"))
+	assert.Nil(t, err)
 
 	// 3. 删除一个空的 Key
-	//err = db.Delete(nil)
-	//assert.Equal(t, ErrKeyIsEmpty, err)
+	err = db.Delete(nil)
+	assert.Equal(t, ErrKeyIsEmpty, err)
 
 	// 4. 值被删除之后重新 Put
-	//err = db.Put(utils.GetTestKey(22), utils.RandomValue(128))
-	//assert.Nil(t, err)
-	//err = db.Delete(utils.GetTestKey(22))
-	//assert.Nil(t, err)
-	//
-	//err = db.Put(utils.GetTestKey(22), utils.RandomValue(128))
-	//assert.Nil(t, err)
-	//val, err := db.Get(utils.GetTestKey(22))
-	//assert.NotNil(t, val)
-	//assert.Nil(t, val)
+	err = db.Put(utils.GetTestKey(24), utils.RandomValue(128))
+	assert.Nil(t, err)
+	err = db.Delete(utils.GetTestKey(24))
+	assert.Nil(t, err)
+
+	err = db.Put(utils.GetTestKey(24), utils.RandomValue(128))
+	assert.Nil(t, err)
+	val, err := db.Get(utils.GetTestKey(24))
+	assert.NotNil(t, val)
+	assert.Nil(t, err)
 }
 
 func checkPutResult(t *testing.T, err error, db *DB) {
