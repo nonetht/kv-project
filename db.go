@@ -181,12 +181,30 @@ func (db *DB) Close() error {
 	}
 
 	// 不活跃文件如何关闭呢？inactiveFile 的类型是 map[uint32]*data.DataFile。即 uint32 - *data.DataFile
-	// 应该就是遍历 inactiveFile 这个映射，然后执行 Close() 函数
+	// 应该就是遍历 inactiveFile 这个映射，然后选择 value 部分（*data.DataFile 类型），然后执行 Close() 函数
+	// TODO: 对于val对应类型，也就是 *data.DataFile，其本质为地址，为什么可以执行 Close 函数？
 	for _, file := range db.inactiveFile {
 		if err := file.Close(); err != nil {
 			return err
 		}
 	}
+	return nil
+}
+
+func (db *DB) Sync() error {
+	// 避免竞态条件，加锁解锁
+	if db.activeFile == nil {
+		return nil
+	}
+
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	// 只对 activeFile 进行操作
+	if err := db.activeFile.Sync(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // 追加写数据到活跃文件中，为了避免竞态条件，应该加锁。
