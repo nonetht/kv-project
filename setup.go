@@ -12,6 +12,11 @@ type Setup struct {
 	IndexType    index.IndexType // 索引类型
 }
 
+type IteratorSetup struct {
+	Prefix  []byte // 遍历前缀为指定的 Key，默认为空
+	Reverse bool   // 是否反向遍历，默认 false 为正向
+}
+
 type IndexerType = int8
 
 const (
@@ -27,4 +32,9 @@ var DefaultSetup = Setup{
 	DataFileSize: 256 * 1024 * 1024, // 256 MB
 	SyncWrites:   false,
 	IndexType:    BTree,
+}
+
+var DefaultIteratorSetup = IteratorSetup{
+	Prefix:  nil,
+	Reverse: false,
 }
