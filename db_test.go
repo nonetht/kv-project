@@ -152,6 +152,10 @@ func TestDB_Delete(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+// TODO: 实现其中 Close 函数的测试
+
+// TODO: 实现其中 Sync 函数的测试
+
 func checkPutResult(t *testing.T, err error, db *DB) {
 	t.Helper() // 告诉测试框架，该方法是一个辅助函数。测试失败的话，报告行号指向调用函数地方而非测试辅助函数内部。
 	assert.Nil(t, err)

@@ -1,0 +1,15 @@
+# test log
+getenv TMPDIR
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestOpenDataFile1404995324/001/000000000.data
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestOpenDataFile1404995324/001/000000111.data
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestOpenDataFile1404995324/001/000000111.data
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T
+getenv TMPDIR
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/000000111.data
+getenv TMPDIR
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/000000123.data
+getenv TMPDIR
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/000000502.data
+getenv TMPDIR
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestDataFile_ReadLogRecord2806098526/001/000000222.data
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T

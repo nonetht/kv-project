@@ -1,0 +1,7 @@
+# test log
+getenv TMPDIR
+stat /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/bitcask-go3966108023
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/bitcask-go3966108023
+getenv TMPDIR
+stat /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/bitcask-go-put1379334989
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/bitcask-go-put1379334989

@@ -13,6 +13,7 @@ type Indexer interface {
 	Get(key []byte) *data.LogRecordPos
 	Delete(key []byte) bool
 	Iterator(reverse bool) Iterator // 索引迭代器
+	Size() int
 }
 
 // IndexType 用处在什么呢？我不是很理解了。

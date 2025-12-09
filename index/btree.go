@@ -14,6 +14,10 @@ type BTree struct {
 	mu    *sync.RWMutex // 读写锁
 }
 
+func (bt *BTree) Size() int {
+	return bt.btree.Len()
+}
+
 func NewBTree() *BTree {
 	return &BTree{
 		btree: btree.New(32),
@@ -62,6 +66,10 @@ func (bt *BTree) Delete(key []byte) bool {
 }
 
 func (bt *BTree) Iterator(reverse bool) Iterator {
+	if bt == nil {
+		return nil
+	}
+
 	bt.mu.RLock()
 	defer bt.mu.RUnlock()
 
@@ -109,7 +117,7 @@ func (b *btreeIterator) Rewind() {
 	b.currIndex = 0
 }
 
-// Seek 根据传入的 key 查找到第一个大于等于的 key 的*索引*
+// Seek 根据传入的 key 查找到第一个大于等于的 key 的*索引*。此外，Seek 函数没有返回值
 // TODO: 没有看懂 Seek 函数的内容，我也很敬佩作者是从哪里找到的这些函数 —— sort.Search
 func (b *btreeIterator) Seek(key []byte) {
 	if b.reverse {
@@ -123,7 +131,7 @@ func (b *btreeIterator) Seek(key []byte) {
 	}
 }
 
-// Next 跳转到下一个 key
+// Next 跳转到下一个 key，什么也不返回
 func (b *btreeIterator) Next() {
 	b.currIndex++
 }

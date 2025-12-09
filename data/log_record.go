@@ -32,8 +32,7 @@ func NewLogRecord(key []byte, value []byte) *LogRecord {
 	}
 }
 
-// LogRecordPos 向内存中写入的索引信息
-// 说明了文件名称以及位置
+// LogRecordPos 向内存中写入的索引信息，说明了文件名称以及位置
 type LogRecordPos struct {
 	Fid    uint32
 	Offset int64
@@ -83,7 +82,7 @@ func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
 	crc := crc32.ChecksumIEEE(encodedBytes[4:]) // 最终返回的是 uint32 类型，如何将其转换为 []byte 类型呢？
 	// 小端序，大端序....(这里使用BigEndian可以吗？)
 	// PutUint32 涉及到移位运算...其中是 crc 的值添加到 encodedBytes[0:4]
-	binary.LittleEndian.PutUint32(encodedBytes, crc) // TODO: 这里出现问题，我们写成了，header[:4]
+	binary.LittleEndian.PutUint32(encodedBytes, crc)
 
 	return encodedBytes, int64(size)
 }

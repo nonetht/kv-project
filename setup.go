@@ -12,8 +12,9 @@ type Setup struct {
 	IndexType    index.IndexType // 索引类型
 }
 
+// TODO: 为什么要添加这个 Prefix 字段呢？
 type IteratorSetup struct {
-	Prefix  []byte // 遍历前缀为指定的 Key，默认为空
+	Prefix  []byte // 遍历前缀为指定的 Key，默认为空。似乎是可以能够对，就是针对更为具体的 Key。
 	Reverse bool   // 是否反向遍历，默认 false 为正向
 }
 

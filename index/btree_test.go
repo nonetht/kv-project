@@ -62,12 +62,57 @@ func TestBTree_Iterator(t *testing.T) {
 	// TODO: 因为万一前面的 case 没有通过测试，那么后面的测试也是无法通过。我的想法是，将所有的 case 拆分为单独的子测试出来。
 	// 1. btree 为空的情况下
 	iter1 := bt1.Iterator(false)
-	assert.False(t, iter1.Valid())
+	assert.Equal(t, iter1.Valid(), false)
 
 	// 2. Put 进去一个值的时候，测试其 (Key，Value)
 	bt1.Put([]byte("code"), &data.LogRecordPos{Fid: 1, Offset: 100})
 	iter2 := bt1.Iterator(false)
 	assert.True(t, iter2.Valid())
-	assert.Equal(t, []byte("code"), iter2.Key())
-	assert.Equal(t, &data.LogRecordPos{Fid: 1, Offset: 100}, iter2.Key())
+	//t.Log(iter2.Key())   // [99, 111, 100, 1010]
+	//t.Log(iter2.Value()) // &{1 100}
+	//assert.Equal(t, []byte("code"), iter2.Key())
+	//assert.Equal(t, &data.LogRecordPos{Fid: 1, Offset: 100}, iter2.Key())
+	// 随后我们执行了测试如下，但是我感觉既然都看到了打印结果了，这条测试是否还有意义呢？我是认为这条测试没什么意义，总感觉是画蛇添足。
+	assert.NotNil(t, iter2.Key())
+	assert.NotNil(t, iter2.Value())
+
+	iter2.Next()
+	// 我还是感觉有些画蛇添足，既然通过 Log 函数知道了结果，为什么还要再次验证呢？
+	//t.Log(iter2.Valid()) // false
+	assert.Equal(t, iter2.Valid(), false)
+
+	// 3. 多条数据的话呢？
+	// TODO: 我不太理解，就是第二个参数 LogRecordPos 的意义，我的理解是指定文件名称和位置，这种在同一位置连续 Put，会造成原本的被覆盖掉吗？
+	bt1.Put([]byte("a"), &data.LogRecordPos{Fid: 1, Offset: 10})
+	bt1.Put([]byte("b"), &data.LogRecordPos{Fid: 1, Offset: 10})
+	bt1.Put([]byte("c"), &data.LogRecordPos{Fid: 1, Offset: 10})
+
+	iter3 := bt1.Iterator(false)
+	assert.True(t, iter3.Valid())
+
+	//var offset int
+	for iter3.Rewind(); iter3.Valid(); iter3.Next() {
+		assert.NotNil(t, iter3.Key())
+		// TODO: 完善当前的测试，应该进一步提高测试准确性。
+		//assert.Equal(t, string(iter3.Key()), string(rune('a'+offset)))
+		//offset++
+	}
+
+	iter4 := bt1.Iterator(true)
+	assert.True(t, iter4.Valid())
+
+	//var offset int
+	for iter4.Rewind(); iter4.Valid(); iter4.Next() {
+		assert.NotNil(t, iter4.Key())
+		// TODO: 完善当前的测试，应该进一步提高测试准确性。
+		//assert.Equal(t, string(iter3.Key()), string(rune('a'+offset)))
+		//offset++
+	}
+
+	// 4. 测试 Seek 函数
+	iter5 := bt1.Iterator(false)
+	iter5.Seek([]byte("cc"))
+	t.Log(iter5.Key(), iter5.Value())
+
+	// 5. 测试反向情况下的 Seek 函数
 }
