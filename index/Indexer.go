@@ -12,6 +12,7 @@ type Indexer interface {
 	Put(key []byte, pos *data.LogRecordPos) bool // 写入操作
 	Get(key []byte) *data.LogRecordPos
 	Delete(key []byte) bool
+	Iterator(reverse bool) Iterator // 索引迭代器
 }
 
 // IndexType 用处在什么呢？我不是很理解了。
@@ -33,6 +34,7 @@ func NewIndexer(typ IndexType) Indexer {
 	}
 }
 
+// Item 对 key 和 logRecordPos 的封装
 type Item struct {
 	key []byte
 	pos *data.LogRecordPos
