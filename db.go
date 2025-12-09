@@ -121,6 +121,8 @@ func (db *DB) Delete(key []byte) error {
 	return nil
 }
 
+// Get 通过 key 然后在内存索引之中找到 pos，随后根据 pos 中字段找到对应的 dataFile，然后根据偏移量读取数据取得 LogRecord。
+// 最后 LogRecord 之中的 Value 字段就是 Value 的值
 func (db *DB) Get(key []byte) ([]byte, error) {
 	// 读取数据时，还应该加锁
 	db.mu.Lock()
@@ -136,6 +138,10 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 		return nil, ErrKeyNotFound
 	}
 
+	return db.getValueFromPos(pos)
+}
+
+func (db *DB) getValueFromPos(pos *data.LogRecordPos) ([]byte, error) {
 	// 问题是拿到了 pos 之后，我们应该怎样获取对应的数据文件呢？
 	// pos 的确有 fileId 字段，但是如何使用呢？怎样根据文件 id 找到数据文件呢？
 	var dataFile *data.DataFile
