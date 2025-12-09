@@ -192,6 +192,24 @@ func (db *DB) ListKeys() [][]byte {
 	return keys
 }
 
+// Fold 获取所有的数据，执行用户指定操作。函数返回 false 时终止遍历
+func (db *DB) Fold(fn func(key []byte, value []byte) bool) error {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	iter := db.index.Iterator(false)
+	for iter.Rewind(); iter.Valid(); iter.Next() {
+		val, err := db.getValueFromPos(iter.Value())
+		if err != nil {
+			return err
+		}
+		if !fn(iter.Key(), val) {
+			break
+		}
+	}
+	return nil
+}
+
 // Close 关闭数据库，清理并释放相关资源
 func (db *DB) Close() error {
 	if db == nil {
