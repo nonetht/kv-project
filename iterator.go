@@ -1,7 +1,6 @@
 package bitcask_go
 
 import (
-	"bitcask-go/data"
 	"bitcask-go/index"
 )
 
@@ -14,41 +13,54 @@ type Iterator struct {
 
 // NewIterator 初始化迭代器
 func (db *DB) NewIterator(opts IteratorSetup) *Iterator {
-	db.index.Iterator(opts.Reverse).Rewind()
+	indexIter := db.index.Iterator(opts.Reverse)
+	return &Iterator{
+		db:        db,
+		indexIter: indexIter,
+		options:   opts,
+	}
 }
+
+/*
+虽然大部分的方法，都可以调用索引迭代器来实现，但是部分函数不行。
+*/
 
 // Rewind 重新回到迭代器起点
 func (it *Iterator) Rewind() {
-	//TODO implement me
-	panic("implement me")
+	it.indexIter.Rewind()
 }
 
 func (it *Iterator) Seek(key []byte) {
-	//TODO implement me
-	panic("implement me")
+	it.indexIter.Seek(key)
 }
 
 func (it *Iterator) Next() {
-	//TODO implement me
-	panic("implement me")
+	it.indexIter.Next()
 }
 
 func (it *Iterator) Valid() bool {
-	//TODO implement me
-	panic("implement me")
+	return it.indexIter.Valid()
 }
 
+// Key 当前遍历位置的 Key 数据
 func (it *Iterator) Key() []byte {
-	//TODO implement me
-	panic("implement me")
+	return it.indexIter.Key()
 }
 
-func (it *Iterator) Value() *data.LogRecordPos {
-	//TODO implement me
-	panic("implement me")
+// Value 当前遍历位置的 Value 数据
+// 注意，这个有所不同，之前的获取value实际上是 logRecordPos。我们是要获取存储的数据，不是这个而是存储的 Value
+func (it *Iterator) Value() ([]byte, error) {
+	logRecordPos := it.indexIter.Value()
+	it.db.mu.Lock()
+	defer it.db.mu.RUnlock()
+
+	value, err := it.db.getValueFromPos(logRecordPos)
+	if err != nil {
+		return nil, err
+	}
+	return value, nil
 }
 
 func (it *Iterator) Close() {
-	//TODO implement me
-	panic("implement me")
+	it.indexIter.Close()
 }
