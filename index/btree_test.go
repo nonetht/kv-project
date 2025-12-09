@@ -54,3 +54,20 @@ func TestBTree_Delete(t *testing.T) {
 	res2 := bt.Delete([]byte("a"))
 	assert.True(t, res2)
 }
+
+func TestBTree_Iterator(t *testing.T) {
+	bt1 := NewBTree()
+
+	// 如何测试我们的迭代器呢？对于迭代器的功能，我们应该怎样测试呢？还有就是像 roseduan 这种测试的方法实在是不太好。
+	// TODO: 因为万一前面的 case 没有通过测试，那么后面的测试也是无法通过。我的想法是，将所有的 case 拆分为单独的子测试出来。
+	// 1. btree 为空的情况下
+	iter1 := bt1.Iterator(false)
+	assert.False(t, iter1.Valid())
+
+	// 2. Put 进去一个值的时候，测试其 (Key，Value)
+	bt1.Put([]byte("code"), &data.LogRecordPos{Fid: 1, Offset: 100})
+	iter2 := bt1.Iterator(false)
+	assert.True(t, iter2.Valid())
+	assert.Equal(t, []byte("code"), iter2.Key())
+	assert.Equal(t, &data.LogRecordPos{Fid: 1, Offset: 100}, iter2.Key())
+}
