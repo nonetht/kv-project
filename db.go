@@ -171,6 +171,18 @@ func (db *DB) getValueFromPos(pos *data.LogRecordPos) ([]byte, error) {
 	return logRecord.Value, nil
 }
 
+// ListKeys 获取数据库之中所有的 key
+func (db *DB) ListKeys() ([][]byte, error) {
+	iter := db.NewIterator(DefaultIteratorSetup)
+
+	var keys [][]byte
+	for iter.Rewind(); iter.Valid(); iter.Next() {
+		keys = append(keys, iter.Key())
+	}
+
+	return keys, nil
+}
+
 // Close 关闭数据库，清理并释放相关资源
 func (db *DB) Close() error {
 	if db == nil {
