@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const DefaultDataFileSize = 64 * 1024 * 1024
+
 // 测试完成之后，销毁 DB 数据目录
 // 为 destoryDB 添加了活跃文件空指针保护。空目录打开时，activeFile为空不再出发panic。
 func destroyDB(db *DB) {
@@ -37,18 +39,23 @@ func TestOpen(t *testing.T) {
 	assert.NotNil(t, db)
 }
 
+// 我们要实现的工厂函数
+func createTestDB(t *testing.T, setup *Setup) (*DB, func()) {
+	// 1. 使用 t.TempDir()，自动生成随机目录，测试结束之后自动清理。
+	// 当然，这要求我们的 Go 版本能够达到 1.15 +
+	dir := t.TempDir()
+	setup.DirPath = dir
+
+	db, err := Open(*setup)
+	assert.Nil(t, err)
+	return db, func() {
+		_ = db.Close()
+	}
+}
+
 func TestDB_Put(t *testing.T) {
 	setup := DefaultSetup
-	dir, _ := os.MkdirTemp("", "bitcask-go-put")
-	t.Log(dir)
-	setup.DirPath = dir
-	setup.DataFileSize = 64 * 1024 * 1024
-	// 根据数据库配置 setup，Open一个数据库
-	db, err := Open(setup) // db 是一个全部测试都可以造成影响的变量
-	defer destroyDB(db)
-	assert.Nil(t, err)
-	assert.NotNil(t, db)
-
+	setup.DataFileSize = DefaultDataFileSize
 	/*
 		其测试流程大致相同，不同地方也就是 Put 的数据略有不同。相同地方在于：
 		1. 对 Put 后的返回值进行检查，看反复的 err 是否为空
@@ -59,33 +66,45 @@ func TestDB_Put(t *testing.T) {
 
 	// 1.正常Put一条数据
 	t.Run("Put one kv pair", func(t *testing.T) {
-		err = db.Put(utils.GetTestKey(1), utils.RandomValue(24))
+		// 子测试开头之前，呼叫工厂函数
+		db, cleanup := createTestDB(t, &setup)
+		defer cleanup()
+
+		err := db.Put(utils.GetTestKey(1), utils.RandomValue(24))
 		checkPutResult(t, err, db)
 	})
 
 	// 2. 重复 Put key 相同的数据
 	// TODO: 如果是重复写入的话，是不是也不会对之前写入的键值对造成影响呢？
 	t.Run("Put 2 same key", func(t *testing.T) {
-		err = db.Put(utils.GetTestKey(1), utils.RandomValue(24))
+		db, cleanup := createTestDB(t, &setup)
+		defer cleanup()
+		err := db.Put(utils.GetTestKey(1), utils.RandomValue(24))
 		checkPutResult(t, err, db)
 	})
 
 	// 3. key 为空
 	t.Run("Put empty key", func(t *testing.T) {
-		err = db.Put([]byte(""), utils.RandomValue(24)) // key 为空的话，肯定会报错的
+		db, cleanup := createTestDB(t, &setup)
+		defer cleanup()
+		err := db.Put([]byte(""), utils.RandomValue(24)) // key 为空的话，肯定会报错的
 		assert.NotNil(t, err)
 		//t.Log(err) // key is empty
 	})
 
 	// 4. value 为空的情况。value为空的话，是可以正常添加的。
 	t.Run("Put empty value", func(t *testing.T) {
-		err = db.Put(utils.GetTestKey(1), []byte(""))
+		db, cleanup := createTestDB(t, &setup)
+		defer cleanup()
+		err := db.Put(utils.GetTestKey(1), []byte(""))
 		checkPutResult(t, err, db)
 	})
 
 	// 5. 写到数据文件进行了转换
 	// TODO: 我说好奇的是，为什么会有这种数字 1000000 如何得到的呢？
 	t.Run("Put ...", func(t *testing.T) {
+		db, cleanup := createTestDB(t, &setup)
+		defer cleanup()
 		for i := 0; i < 1000000; i++ {
 			err := db.Put(utils.GetTestKey(i), utils.RandomValue(128))
 			assert.Nil(t, err)
@@ -97,7 +116,9 @@ func TestDB_Put(t *testing.T) {
 	// TODO: 单独启动测试，就无法通过。但是统一执行测试，就可以通过，为什么呢？
 	// 父测试下多个子测试默认：顺序执行，逻辑独立。一个子测试的失败，不影响下一个子测试的启动。
 	t.Run("After reset, Put data", func(t *testing.T) {
-		err = db.activeFile.Close()
+		db, cleanup := createTestDB(t, &setup)
+		defer cleanup()
+		err := db.activeFile.Close()
 		assert.Nil(t, err)
 
 		// 重启数据库

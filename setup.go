@@ -19,7 +19,7 @@ type IteratorSetup struct {
 }
 
 type WriteBatchSetup struct {
-	MaxBatchNum int  // 一个批次中最大数据量
+	MaxBatchNum uint // 一个批次中最大数据量
 	SyncWrites  bool // 每一次事务提是否持久化
 }
 

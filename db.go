@@ -20,6 +20,7 @@ type DB struct {
 	activeFile   *data.DataFile            // 当前活跃文件
 	inactiveFile map[uint32]*data.DataFile // 不活跃数据文件，也就是不活跃的数据文件。
 	index        index.Indexer             // 内存索引
+	seqNumber    uint64                    // 事务序列号，全局递增
 }
 
 // Open 打开 bitcask 存储引擎的方法

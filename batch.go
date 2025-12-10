@@ -3,6 +3,7 @@ package bitcask_go
 import (
 	"bitcask-go/data"
 	"sync"
+	"sync/atomic"
 )
 
 type WriteBatch struct {
@@ -15,11 +16,10 @@ type WriteBatch struct {
 // NewWriteBatch 创建一个新的 WriteBatch，用于根据设置，暂存用户写入数据
 func (db *DB) NewWriteBatch(setup WriteBatchSetup) *WriteBatch {
 	return &WriteBatch{
-		mu:    new(sync.Mutex),
-		db:    db,
-		setup: setup,
-		// 感觉写的有问题，我这样是对的吗？
-		pendingWrites: make(map[string]*data.LogRecord),
+		mu:            new(sync.Mutex),
+		db:            db,
+		setup:         setup,
+		pendingWrites: make(map[string]*data.LogRecord), // roseduan 明显写的有问题，你写一个类型，编译器都过不去！
 	}
 }
 
@@ -68,4 +68,26 @@ func (w *WriteBatch) Delete(key []byte) error {
 
 	w.pendingWrites[string(key)] = logRecord
 	return nil
+}
+
+// Commit 提交事务，将暂存的数据写到数据文件，并更新内存索引
+func (w *WriteBatch) Commit() error {
+	// 加锁保证事务提交串行化
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if len(w.pendingWrites) == 0 {
+		return nil
+	}
+	if uint(len(w.pendingWrites)) > w.setup.MaxBatchNum {
+		return ErrExceedMaxBatchNum
+	}
+
+	// 加锁保证事务提交串行化
+	//w.mu.Lock()
+	//defer w.mu.Unlock()
+
+	// 获取当前最新的事务序列号
+	seqNumber := atomic.AddUint64(&w.db.seqNumber, 1)
+
 }
