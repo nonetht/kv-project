@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 )
 
+var txnFinKey = []byte("txn-fin")
+
 type WriteBatch struct {
 	mu            *sync.Mutex
 	db            *DB
@@ -91,14 +93,52 @@ func (w *WriteBatch) Commit() error {
 	// 获取当前最新的事务序列号
 	seqNumber := atomic.AddUint64(&w.db.seqNumber, 1)
 
+	// 为什么要创建一个 map 映射呢？(string -> *data.LogRecord)
+	// 作为对索引的缓存，在添加 LogRecord 之后，并不会直接将 pos 返回给我们。
+	positions := make(map[string]*data.LogRecordPos)
 	// 开始向其中写入数据。
 	for _, logRecord := range w.pendingWrites {
-		w.db.appendLogRecord(&data.LogRecord{
+		pos, err := w.db.appendLogRecord(&data.LogRecord{
 			Key:   addSeqToKey(logRecord.Key, seqNumber),
-			Value: logRecord, Value,
-			Type: logRecord.Type,
+			Value: logRecord.Value,
+			Type:  logRecord.Type,
 		})
+		if err != nil {
+			return err
+		}
+		positions[string(logRecord.Key)] = pos
 	}
+
+	// 写一条标识事务完成的数据
+	finishedRecord := &data.LogRecord{
+		Key:  addSeqToKey(txnFinKey, seqNumber),
+		Type: data.LogRecordTxnFinished,
+	}
+
+	if _, err := w.db.appendLogRecord(finishedRecord); err != nil {
+		return err
+	}
+
+	// 根据配置决定是否持久化
+	if w.setup.SyncWrites && w.db.activeFile != nil {
+		if err := w.db.activeFile.Sync(); err != nil {
+			return err
+		}
+	}
+
+	// 更新内存索引
+	for _, record := range w.pendingWrites {
+		pos := positions[string(record.Key)]
+		if record.Type == data.LogRecordNormal {
+			w.db.index.Put(record.Key, pos)
+		}
+		if record.Type == data.LogRecordDeleted {
+			w.db.index.Delete(record.Key)
+		}
+	}
+
+	w.pendingWrites = make(map[string]*data.LogRecord)
+	return nil
 }
 
 // 我的想法是将 seqNumber 添加到 key里面，就是key+seq编码
