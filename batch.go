@@ -2,6 +2,7 @@ package bitcask_go
 
 import (
 	"bitcask-go/data"
+	"encoding/binary"
 	"sync"
 	"sync/atomic"
 )
@@ -90,4 +91,27 @@ func (w *WriteBatch) Commit() error {
 	// 获取当前最新的事务序列号
 	seqNumber := atomic.AddUint64(&w.db.seqNumber, 1)
 
+	// 开始向其中写入数据。
+	for _, logRecord := range w.pendingWrites {
+		w.db.appendLogRecord(&data.LogRecord{
+			Key:   addSeqToKey(logRecord.Key, seqNumber),
+			Value: logRecord, Value,
+			Type: logRecord.Type,
+		})
+	}
+}
+
+// 我的想法是将 seqNumber 添加到 key里面，就是key+seq编码
+func addSeqToKey(key []byte, seqNumber uint64) []byte {
+	seq := make([]byte, binary.MaxVarintLen64) // 创建变长数组
+	n := binary.PutUvarint(seq[:], seqNumber)  // 我们将其中 seqNumber 放入到数组 seq 之中；n 应该是返回的长度
+
+	// 创建一个 切片，长度为 n + len(key)，因为一方面 len(key) -> 要存储 key 的长度；另一方面，是n -> 存储 seqNumber 的内容
+	encKey := make([]byte, n+len(key))
+	// 前 n 对应 seqNumber
+	copy(encKey[:n], seq[:n])
+	// 剩余的，则是对应的 key
+	copy(encKey[n:], key)
+
+	return encKey
 }
