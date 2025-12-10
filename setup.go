@@ -18,6 +18,11 @@ type IteratorSetup struct {
 	Reverse bool   // 是否反向遍历，默认 false 为正向
 }
 
+type WriteBatchSetup struct {
+	MaxBatchNum int  // 一个批次中最大数据量
+	SyncWrites  bool // 每一次事务提是否持久化
+}
+
 type IndexerType = int8
 
 const (
@@ -38,4 +43,9 @@ var DefaultSetup = Setup{
 var DefaultIteratorSetup = IteratorSetup{
 	Prefix:  nil,
 	Reverse: false,
+}
+
+var DefaultWriteBatchSetup = WriteBatchSetup{
+	MaxBatchNum: 1000,
+	SyncWrites:  true,
 }
