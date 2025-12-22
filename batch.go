@@ -9,6 +9,8 @@ import (
 
 var txnFinKey = []byte("txn-fin")
 
+const nonTransactionSeqNo uint64 = 0
+
 type WriteBatch struct {
 	mu            *sync.Mutex
 	db            *DB
@@ -115,6 +117,7 @@ func (w *WriteBatch) Commit() error {
 		Type: data.LogRecordTxnFinished,
 	}
 
+	// 然后将 “事务完成” 的logRecord 添加进去。
 	if _, err := w.db.appendLogRecord(finishedRecord); err != nil {
 		return err
 	}
@@ -126,7 +129,8 @@ func (w *WriteBatch) Commit() error {
 		}
 	}
 
-	// 更新内存索引
+	// 更新内存索引，遍历 pendingWrites 获 key，通过 key 获取对应 pos。
+	// 然后，根据类型，选择是添加还是删除对应的 (key, pos) 从 db.index 之中
 	for _, record := range w.pendingWrites {
 		pos := positions[string(record.Key)]
 		if record.Type == data.LogRecordNormal {
@@ -146,7 +150,7 @@ func addSeqToKey(key []byte, seqNumber uint64) []byte {
 	seq := make([]byte, binary.MaxVarintLen64) // 创建变长数组
 	n := binary.PutUvarint(seq[:], seqNumber)  // 我们将其中 seqNumber 放入到数组 seq 之中；n 应该是返回的长度
 
-	// 创建一个 切片，长度为 n + len(key)，因为一方面 len(key) -> 要存储 key 的长度；另一方面，是n -> 存储 seqNumber 的内容
+	// 创建一个 切片，长度为 n + len(key)，因为一方面 len(key) -> 要存储 key 的长度；另一方面，是 n -> 存储 seqNumber 的内容
 	encKey := make([]byte, n+len(key))
 	// 前 n 对应 seqNumber
 	copy(encKey[:n], seq[:n])
@@ -154,4 +158,11 @@ func addSeqToKey(key []byte, seqNumber uint64) []byte {
 	copy(encKey[n:], key)
 
 	return encKey
+}
+
+// 解析 LogRecord 之中的 key，获取实际 key 和事务序列号。
+func parseLogRecordKey(key []byte) ([]byte, uint64) {
+	seqNumber, n := binary.Uvarint(key)
+	realKey := key[n:] // 前 n 部分的是 seqNumber 部分；n 之后的就是 key
+	return realKey, seqNumber
 }

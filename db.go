@@ -73,13 +73,13 @@ func (db *DB) Put(key []byte, value []byte) error {
 
 	// 构造 LogRecord 结构体
 	logRecord := data.LogRecord{
-		Key:   key,
+		Key:   addSeqToKey(key, nonTransactionSeqNo),
 		Value: value,
 		Type:  data.LogRecordNormal,
 	}
 
 	// 添加 LogRecord 之后，会返回 logRecordPos 的地址和 err
-	logRecordPos, err := db.appendLogRecord(logRecord)
+	logRecordPos, err := db.appendLogRecordWithLock(&logRecord)
 	if err != nil {
 		return err
 	}
@@ -104,11 +104,11 @@ func (db *DB) Delete(key []byte) error {
 
 	// 随后构造对应logRecord信息，然后写入到数据文件之中。
 	logRecord := &data.LogRecord{
-		Key:  key,
+		Key:  addSeqToKey(key, nonTransactionSeqNo),
 		Type: data.LogRecordDeleted,
 	}
 
-	_, err := db.appendLogRecord(*logRecord)
+	_, err := db.appendLogRecordWithLock(logRecord)
 	if err != nil {
 		return err
 	}
@@ -253,11 +253,14 @@ func (db *DB) Sync() error {
 	return nil
 }
 
-// 追加写数据到活跃文件中，为了避免竞态条件，应该加锁。
-func (db *DB) appendLogRecord(logRecord data.LogRecord) (*data.LogRecordPos, error) {
+func (db *DB) appendLogRecordWithLock(logRecord *data.LogRecord) (*data.LogRecordPos, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
+	return db.appendLogRecord(logRecord)
+}
 
+// 追加写数据到活跃文件中，为了避免竞态条件，应该加锁。
+func (db *DB) appendLogRecord(logRecord *data.LogRecord) (*data.LogRecordPos, error) {
 	// 判断当前活跃文件是否存在，因为数据库没有写入的时候是没有文件生成
 	// 如果为空，则初始化活跃文件
 	if db.activeFile == nil {
@@ -268,7 +271,7 @@ func (db *DB) appendLogRecord(logRecord data.LogRecord) (*data.LogRecordPos, err
 
 	// 首先将 LogRecord 进行编码为字节数组类型，
 	// TODO: 为什么要编码为直接数组类型？
-	encodedRecord, size := data.EncodeLogRecord(&logRecord)
+	encodedRecord, size := data.EncodeLogRecord(logRecord)
 	// **判断**，超出预值的话：
 	// 1. 将现有的数据文件转换为旧的数据文件，即 activeFile -> inactiveFile
 	// 2. 打开一个新的数据文件，
@@ -389,6 +392,19 @@ func (db *DB) loadIndexFromDatafile() error {
 		return nil
 	}
 
+	updateIndex := func(key []byte, typ data.LogRecordType, pos *data.LogRecordPos) {
+		var ok bool // 定义 ok 变量，对结果进行检测
+		// 如果为删除类型的话，则执行删除操作。即从 db.index 将其删除
+		if typ == data.LogRecordDeleted {
+			ok = db.index.Delete(key)
+		} else {
+			ok = db.index.Put(key, pos)
+		}
+		if !ok {
+			panic("failed to update index at startup")
+		}
+	}
+
 	// 通过 db 中的 activeFile，inactiveFile获取的对应的 dataFile，而我们则是使用的 OpenDataFile
 	for i, fid := range db.fileIds {
 		var fileId = uint32(fid)
@@ -418,15 +434,19 @@ func (db *DB) loadIndexFromDatafile() error {
 				Offset: offset, // 起始值就是 0
 			}
 
-			var ok bool // 定义 ok 变量，对结果进行检测
-			// 如果为删除类型的话，则执行删除操作。即从 db.index 将其删除
-			if logRecord.Type == data.LogRecordDeleted {
-				ok = db.index.Delete(logRecord.Key)
+			// TODO: 为什么要解析 key 拿到事务序列号？
+			key, seq := parseLogRecordKey(logRecord.Key)
+
+			if seq == nonTransactionSeqNo {
+				// 非事务操作，直接执行事务处理
+				updateIndex(key, data.LogRecordDeleted, logRecordPos)
 			} else {
-				ok = db.index.Put(logRecord.Key, logRecordPos)
-			}
-			if !ok {
-				return ErrIndexUpdateFailed
+
+				// 事务完成，更新索引
+				if logRecord.Type == data.LogRecordTxnFinished {
+
+				}
+
 			}
 
 			// 对 offset 进行递增操作
