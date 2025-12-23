@@ -382,12 +382,9 @@ func (db *DB) loadDataFile() error {
 	return nil
 }
 
-// 从数据文件之中，加载索引。遍历文件的记录，更新到内存索引中
-// 感觉该函数还是太臃肿了，非常庞大的一个 for 循环，如果有机会将其重构就好了。
+// TODO: kv存储项目代码真是一坨，我看着都难受...感觉实在是太臃肿了！
 func (db *DB) loadIndexFromDatafile() error {
 	// dataFile -> logRecord -> logRecordPos -> Put 到 Indexer 之中
-
-	// 没有文件，说明是一个空的数据库
 	if len(db.fileIds) == 0 {
 		return nil
 	}
@@ -404,6 +401,8 @@ func (db *DB) loadIndexFromDatafile() error {
 			panic("failed to update index at startup")
 		}
 	}
+
+	transactionRecords := make(map[uint64]*data.TransactionRecord)
 
 	// 通过 db 中的 activeFile，inactiveFile获取的对应的 dataFile，而我们则是使用的 OpenDataFile
 	for i, fid := range db.fileIds {
@@ -438,16 +437,22 @@ func (db *DB) loadIndexFromDatafile() error {
 			key, seq := parseLogRecordKey(logRecord.Key)
 
 			if seq == nonTransactionSeqNo {
-				// 非事务操作，直接执行事务处理
+				// 非事务操作，直接更新内存索引
 				updateIndex(key, data.LogRecordDeleted, logRecordPos)
 			} else {
-				// 事务完成，对应的 seq no 数据可以更新到内存索引中
+				// 事务完成，对应的 seq 的数据可以更新到内存索引中
 				if logRecord.Type == data.LogRecordTxnFinished {
-					//for _, txnRecord := range transactionRecords[seq] {
-					//	updateIndex(txnRecord.Record.Key, txnRecord.Record.Type, &txnRecord)
-					//}
+					for _, txnRecord := range transactionRecords {
+						updateIndex(txnRecord.Record.Key, txnRecord.Record.Type, txnRecord.Pos)
+					}
+					delete(transactionRecords, seq)
+				} else {
+					logRecord.Key = realKey
+					transactionRecords[seq] = append(transactionRecords[seq], &data.TransactionRecord{
+						Record: logRecord,
+						Pos:    logRecordPos,
+					})
 				}
-
 			}
 
 			// 对 offset 进行递增操作
