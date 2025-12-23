@@ -441,10 +441,11 @@ func (db *DB) loadIndexFromDatafile() error {
 				// 非事务操作，直接执行事务处理
 				updateIndex(key, data.LogRecordDeleted, logRecordPos)
 			} else {
-
-				// 事务完成，更新索引
+				// 事务完成，对应的 seq no 数据可以更新到内存索引中
 				if logRecord.Type == data.LogRecordTxnFinished {
-
+					//for _, txnRecord := range transactionRecords[seq] {
+					//	updateIndex(txnRecord.Record.Key, txnRecord.Record.Type, &txnRecord)
+					//}
 				}
 
 			}

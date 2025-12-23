@@ -2,22 +2,18 @@ package fio
 
 import "os"
 
-// TODO: 我不明白这是做什么的呢？
+// DataFilePerm TODO: 我不明白这是做什么的呢？
 const DataFilePerm = 0644
 
 // FileIO 结构体实现了 io_manager 接口，IoManager接口中所有方法最终都是对磁盘文件进行操作
-// Go语言中，该“文件”就是 *os.File 类型变量，称之为 File Descriptor / File Handle
 type FileIO struct {
-	fd *os.File // 文件句柄或文件描述符
+	fd *os.File
 }
 
 // NewFileIOManager 初始化标准文件
 func NewFileIOManager(filePath string) (*FileIO, error) {
 	fd, err := os.OpenFile(
 		filePath,
-		// os.O_CREATE: 如果文件不存在，创建它
-		// os.O_RDWR: 以读写模式打开文件
-		// os.O_APPEND: 写数据时，始终追加到文件末尾（追加写操作）
 		os.O_CREATE|os.O_RDWR|os.O_APPEND,
 		DataFilePerm,
 	)
