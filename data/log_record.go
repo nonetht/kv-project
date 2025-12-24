@@ -18,7 +18,7 @@ const (
 const maxLogRecordHeaderSize = binary.MaxVarintLen32*2 + 5
 
 // LogRecord 向磁盘中写入的数据信息
-// 之所以叫日志，是因为数据文件中数据是追加写入的，类似日志的格式
+// 之所以叫日志，是因为数据文件中数据是追加写入的，类似日志的格式；对于后续来说，为什么不将 SeqNumber 作为字段添加到其中呢？
 type LogRecord struct {
 	Key   []byte
 	Value []byte
@@ -45,6 +45,12 @@ type logRecordHeader struct {
 	recordType LogRecordType // 标识 LogRecord 类型
 	keySize    uint32        // key 大小
 	valueSize  uint32        // value 大小
+}
+
+// TransactionRecord 暂存事务相关的数据
+type TransactionRecord struct {
+	Record *LogRecord
+	Pos    *LogRecordPos
 }
 
 // EncodeLogRecord 对 LogRecord 进行编码，返回字节数组以及其长度

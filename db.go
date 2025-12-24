@@ -222,8 +222,10 @@ func (db *DB) Close() error {
 	defer db.mu.Unlock()
 
 	// 关闭当前活跃文件
-	if err := db.activeFile.Close(); err != nil {
-		return err
+	if db.activeFile != nil {
+		if err := db.activeFile.Close(); err != nil {
+			return err
+		}
 	}
 
 	// 不活跃文件如何关闭呢？inactiveFile 的类型是 map[uint32]*data.DataFile。即 uint32 - *data.DataFile
@@ -402,7 +404,9 @@ func (db *DB) loadIndexFromDatafile() error {
 		}
 	}
 
-	transactionRecords := make(map[uint64]*data.TransactionRecord)
+	// 创建一个缓冲区，用于存储 seq -> 对应seq事务组成的数组
+	transactionRecords := make(map[uint64][]*data.TransactionRecord)
+	var currentSeqNumber = nonTransactionSeqNo
 
 	// 通过 db 中的 activeFile，inactiveFile获取的对应的 dataFile，而我们则是使用的 OpenDataFile
 	for i, fid := range db.fileIds {
@@ -433,26 +437,36 @@ func (db *DB) loadIndexFromDatafile() error {
 				Offset: offset, // 起始值就是 0
 			}
 
-			// TODO: 为什么要解析 key 拿到事务序列号？
-			key, seq := parseLogRecordKey(logRecord.Key)
+			// TODO: 为什么要拿到事务序列号？
+			// 因为我们需要通过 seq 来得到是否为事务操作，用于后续判断
+			realKey, seq := parseLogRecordKey(logRecord.Key)
 
 			if seq == nonTransactionSeqNo {
 				// 非事务操作，直接更新内存索引
-				updateIndex(key, data.LogRecordDeleted, logRecordPos)
+				updateIndex(realKey, logRecord.Type, logRecordPos)
 			} else {
-				// 事务完成，对应的 seq 的数据可以更新到内存索引中
+				// 事务完成，对应的 seq 的数据可以更新到内存索引中。这里应该是读取到最后一个标志事务结束的 logRecord 了（事务提交成功）
 				if logRecord.Type == data.LogRecordTxnFinished {
-					for _, txnRecord := range transactionRecords {
+					// 随后遍历整个缓冲区，将其内容用于索引的更新
+					for _, txnRecord := range transactionRecords[seq] {
 						updateIndex(txnRecord.Record.Key, txnRecord.Record.Type, txnRecord.Pos)
 					}
+					// 随后将 seq 键值对删除，因此已经更新到了索引之中
 					delete(transactionRecords, seq)
 				} else {
+					// 在事务没有完成之前，我们需要将其添加到 transactionRecords 暂存
 					logRecord.Key = realKey
+					// transactionRecords[seq] 对应的是一个数组，数组之中的元素类型是 *data.TransactionRecord
 					transactionRecords[seq] = append(transactionRecords[seq], &data.TransactionRecord{
 						Record: logRecord,
 						Pos:    logRecordPos,
 					})
 				}
+			}
+
+			// 更新事务序列号
+			if seq > currentSeqNumber {
+				currentSeqNumber = seq
 			}
 
 			// 对 offset 进行递增操作
@@ -462,8 +476,10 @@ func (db *DB) loadIndexFromDatafile() error {
 		if i == len(db.fileIds)-1 {
 			db.activeFile.WriteOff = offset
 		}
-
 	}
+
+	// 更新到 db 的字段之中
+	db.seqNumber = currentSeqNumber
 	return nil
 }
 

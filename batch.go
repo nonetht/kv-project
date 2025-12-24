@@ -24,7 +24,7 @@ func (db *DB) NewWriteBatch(setup WriteBatchSetup) *WriteBatch {
 		mu:            new(sync.Mutex),
 		db:            db,
 		setup:         setup,
-		pendingWrites: make(map[string]*data.LogRecord), // roseduan 明显写的有问题，你写一个类型，编译器都过不去！
+		pendingWrites: make(map[string]*data.LogRecord),
 	}
 }
 
@@ -33,6 +33,7 @@ func (w *WriteBatch) Put(key []byte, value []byte) error {
 	if len(key) == 0 {
 		return ErrKeyIsEmpty
 	}
+	// 加锁保证线程安全
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -55,9 +56,10 @@ func (w *WriteBatch) Delete(key []byte) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	// 对应case2，待删除数据在 pendingWrites 之中
+	// 对应case2，待删除数据在 pendingWrites 之中；同样，如果不存在则无事发生。
 	if w.pendingWrites[string(key)] != nil {
 		delete(w.pendingWrites, string(key)) // 从 pendingWrites 之中，将 string(key) 删除掉
+		return nil
 	}
 
 	// 对应case1，待删除数据不存在；但是不能放在 case2 前面，万一其中的待删除没有在索引之中找到，但是可以在 pendingWrites 中找到呢？
@@ -65,7 +67,7 @@ func (w *WriteBatch) Delete(key []byte) error {
 		return nil
 	}
 
-	// 应该是将待删除的写入到 pendingWrites 之中
+	// 应该是将待删除的写入到 pendingWrites 之中，但是忽略其中 Value 内容
 	logRecord := &data.LogRecord{
 		Key:  key,
 		Type: data.LogRecordDeleted,
@@ -88,10 +90,6 @@ func (w *WriteBatch) Commit() error {
 		return ErrExceedMaxBatchNum
 	}
 
-	// 加锁保证事务提交串行化
-	//w.mu.Lock()
-	//defer w.mu.Unlock()
-
 	// 获取当前最新的事务序列号
 	seqNumber := atomic.AddUint64(&w.db.seqNumber, 1)
 
@@ -99,6 +97,7 @@ func (w *WriteBatch) Commit() error {
 	// 作为对索引的缓存，在添加 LogRecord 之后，并不会直接将 pos 返回给我们。
 	positions := make(map[string]*data.LogRecordPos)
 	// 开始向其中写入数据。
+	// TODO: 诶，是否可以添加一个 logRecord，然后立即更新对应索引呢？
 	for _, logRecord := range w.pendingWrites {
 		pos, err := w.db.appendLogRecord(&data.LogRecord{
 			Key:   addSeqToKey(logRecord.Key, seqNumber),
@@ -129,8 +128,6 @@ func (w *WriteBatch) Commit() error {
 		}
 	}
 
-	// 更新内存索引，遍历 pendingWrites 获 key，通过 key 获取对应 pos。
-	// 然后，根据类型，选择是添加还是删除对应的 (key, pos) 从 db.index 之中
 	for _, record := range w.pendingWrites {
 		pos := positions[string(record.Key)]
 		if record.Type == data.LogRecordNormal {
@@ -161,8 +158,8 @@ func addSeqToKey(key []byte, seqNumber uint64) []byte {
 }
 
 // 解析 LogRecord 之中的 key，获取实际 key 和事务序列号。
-func parseLogRecordKey(key []byte) ([]byte, uint64) {
-	seqNumber, n := binary.Uvarint(key)
-	realKey := key[n:] // 前 n 部分的是 seqNumber 部分；n 之后的就是 key
-	return realKey, seqNumber
+func parseLogRecordKey(key []byte) (realKey []byte, seqNumber uint64) {
+	seqNumber, n := binary.Uvarint(key) // 其中变量 n 为新的变量，因此短声明可以使用。
+	realKey = key[n:]                   // 前 n 部分的是 seqNumber 部分；n 之后的就是 key
+	return
 }

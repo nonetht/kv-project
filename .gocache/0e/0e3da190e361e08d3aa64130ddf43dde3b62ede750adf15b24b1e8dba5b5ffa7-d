@@ -1,0 +1,8 @@
+./batch.go
+./db.go
+./error.go
+./iterator.go
+./setup.go
+./batch_test.go
+./db_test.go
+./iterator_test.go

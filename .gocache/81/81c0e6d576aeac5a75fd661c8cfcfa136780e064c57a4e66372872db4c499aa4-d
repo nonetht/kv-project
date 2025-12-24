@@ -1,0 +1,25 @@
+# test log
+getenv TMPDIR
+stat /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestWriteBatch_PutAndCommit2957499156/001
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestWriteBatch_PutAndCommit2957499156/001
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestWriteBatch_PutAndCommit2957499156/001/000000000.data
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestWriteBatch_PutAndCommit2957499156
+getenv TMPDIR
+stat /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestWriteBatch_DeletePendingWrite4047429514/001
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestWriteBatch_DeletePendingWrite4047429514/001
+getenv TMPDIR
+stat /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestWriteBatch_DeleteExistingKey2645113102/001
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestWriteBatch_DeleteExistingKey2645113102/001
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestWriteBatch_DeleteExistingKey2645113102/001/000000000.data
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestWriteBatch_DeleteExistingKey2645113102
+getenv TMPDIR
+stat /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestWriteBatch_DeleteMissingKeyNoop3396236923/001
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestWriteBatch_DeleteMissingKeyNoop3396236923/001
+getenv TMPDIR
+stat /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestWriteBatch_CommitExceedMaxBatchNum2978613775/001
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestWriteBatch_CommitExceedMaxBatchNum2978613775/001
+getenv TMPDIR
+stat /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestWriteBatch_CommitIncrementsSeqNumber3927896729/001
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestWriteBatch_CommitIncrementsSeqNumber3927896729/001
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestWriteBatch_CommitIncrementsSeqNumber3927896729/001/000000000.data
+open /var/folders/hg/dvfl8ymd03l80wctphqtg_g80000gn/T/TestWriteBatch_CommitIncrementsSeqNumber3927896729
