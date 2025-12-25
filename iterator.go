@@ -56,7 +56,7 @@ func (it *Iterator) Key() []byte {
 // 注意，这个有所不同，之前的获取value实际上是 logRecordPos。我们是要获取存储的数据，不是这个而是存储的 Value
 func (it *Iterator) Value() ([]byte, error) {
 	logRecordPos := it.indexIter.Value()
-	it.db.mu.Lock()
+	it.db.mu.RLock()
 	defer it.db.mu.RUnlock()
 
 	return it.db.getValueFromPos(logRecordPos)

@@ -13,7 +13,11 @@ var (
 	ErrInvalidCRC = errors.New("invalid crc value, log record maybe corrupted")
 )
 
-const DataFileNameSuffix = ".data"
+const (
+	FileNameSuffix = ".data"
+	HintFileName   = "hint-index"
+	MergeFinished = "merge-finished"
+)
 
 // DataFile 使用结构体来定义数据文件
 type DataFile struct {
@@ -26,8 +30,12 @@ type DataFile struct {
 // OpenDataFile 打开数据文件
 func OpenDataFile(dirPath string, fileId uint32) (*DataFile, error) {
 	// fileName = filePath + fileName + Suffix
-	fileName := filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+DataFileNameSuffix)
+	fileName := filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+FileNameSuffix)
 	// 初始化 IOManager 管理器接口；同时也是下面这行代码实现了，即便不存在的名称也可以被创建。
+	return newDataFile(fileName, fileId)
+}
+
+func newDataFile(fileName string, fileId uint32) (*DataFile, error) {
 	ioManager, err := fio.NewIoManager(fileName)
 	if err != nil {
 		return nil, err
@@ -37,6 +45,19 @@ func OpenDataFile(dirPath string, fileId uint32) (*DataFile, error) {
 		WriteOff:  0,
 		IoManager: ioManager,
 	}, nil
+}
+
+// OpenHintFile 打开 Hint 索引文件。
+func OpenHintFile(dirPath string) (*DataFile, error) {
+	fileName := filepath.Join(dirPath, HintFileName)
+	return newDataFile(fileName, 0)
+}
+
+// 标识 merge 完成的文件
+func
+
+func (df *DataFile) WriteHintRecord(key []byte, pos *LogRecordPos) error {
+	return nil
 }
 
 func (df *DataFile) Sync() error {
@@ -52,26 +73,18 @@ func (df *DataFile) Write(buf []byte) error {
 	return nil
 }
 
-// ReadLogRecord
-// TODO: 读取对应的 LogRecord 为什么还要需要 offset？
-// 除了返回一条 LogRecord，还要返回 LogRecord 大小
-// TODO: 说实话，我感觉我什么不能单独创建一个函数来求取 LogRecord 的大小呢？
-// 确实，其实我也考虑过，就是用单独的函数来做，是不是更好呢？
 func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 	fileSize, err := df.IoManager.Size()
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// 如果读取的最大 header 长度超过文件的长度，这只需要读取到文件的末尾即可。
-	// TODO: 我不懂是为什么要加上该判断条件。
 	var headerBytes int64 = maxLogRecordHeaderSize
 	if offset+maxLogRecordHeaderSize > fileSize {
-		headerBytes = fileSize - offset // 实际上就是将剩下的一并读取
+		headerBytes = fileSize - offset
 	}
 
-	// headerBuf 有问题，导致的 decode 函数返回结果也有问题。
-	headerBuf, err := df.readNBytes(headerBytes, offset) // 一般情况下，headerBytes = 15；为了减少系统调用，先按照最大数量读取。
+	headerBuf, err := df.readNBytes(headerBytes, offset)
 	if err != nil {
 		return nil, 0, err
 	}

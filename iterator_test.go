@@ -63,11 +63,6 @@ func TestDB_Iterator_Single_Val(t *testing.T) {
 }
 
 func TestDB_Iterator_Multi_Val(t *testing.T) {
-
-	// 反向迭代
-
-	// 指定 prefix
-
 	db, cleanup := newDB(t, DefaultSetup)
 	defer cleanup()
 

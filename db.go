@@ -21,6 +21,7 @@ type DB struct {
 	inactiveFile map[uint32]*data.DataFile // 不活跃数据文件，也就是不活跃的数据文件。
 	index        index.Indexer             // 内存索引
 	seqNumber    uint64                    // 事务序列号，全局递增
+	isMerging    bool                      // 是否在进行merge，我们一次仅允许一次merge在进行。
 }
 
 // Open 打开 bitcask 存储引擎的方法
@@ -261,22 +262,14 @@ func (db *DB) appendLogRecordWithLock(logRecord *data.LogRecord) (*data.LogRecor
 	return db.appendLogRecord(logRecord)
 }
 
-// 追加写数据到活跃文件中，为了避免竞态条件，应该加锁。
 func (db *DB) appendLogRecord(logRecord *data.LogRecord) (*data.LogRecordPos, error) {
-	// 判断当前活跃文件是否存在，因为数据库没有写入的时候是没有文件生成
-	// 如果为空，则初始化活跃文件
 	if db.activeFile == nil {
 		if err := db.initActiveFile(); err != nil {
 			return nil, err
 		}
 	}
 
-	// 首先将 LogRecord 进行编码为字节数组类型，
-	// TODO: 为什么要编码为直接数组类型？
 	encodedRecord, size := data.EncodeLogRecord(logRecord)
-	// **判断**，超出预值的话：
-	// 1. 将现有的数据文件转换为旧的数据文件，即 activeFile -> inactiveFile
-	// 2. 打开一个新的数据文件，
 	if db.activeFile.WriteOff+size > db.setup.DataFileSize {
 		// 将当前活跃文件持久化，持久化到磁盘之中
 		// TODO: 比较好奇，所谓的持久化是个什么样子。
@@ -343,29 +336,21 @@ func (db *DB) loadDataFile() error {
 	}
 
 	var fileIds []int
-	// 遍历当前目录所有文件，并找到以 .data 后缀结尾的文件
 	for _, entry := range dirEntries {
-		// 如果是以 .data 结尾的话，需要对文件名进行分割
-		if strings.HasSuffix(entry.Name(), data.DataFileNameSuffix) {
-			// e.g. 当前文件为 001.data 文件，我们需要根据 "." 来分割，获取文件名 001 作为文件id
-			// 最后 Split函数之后返回的是 ["001", "data"]
+		if strings.HasSuffix(entry.Name(), data.FileNameSuffix) {
 			splitNames := strings.Split(entry.Name(), ".")
-			fileId, err := strconv.Atoi(splitNames[0]) // 是不是将 string -> int 类型？是的
+			fileId, err := strconv.Atoi(splitNames[0])
 			if err != nil {
 				return ErrDataDirectoryCorrupted
 			}
 
-			// 将文件 id 添加到我们的 fileId 数组之中
 			fileIds = append(fileIds, fileId)
 		}
 	}
 
-	// 对文件 id 进行排序，从小到大进行依次加载
 	sort.Ints(fileIds)
 	db.fileIds = fileIds // 将数组传递给 db 结构体之中的 fileIds 字段
 
-	// 遍历每个文件id，并打开对应的数据文件。
-	//TODO: 但是如果存在这么一种情况的话呢？就是一个文件为001.data,还有一个叫001.txt。就是相同名称，但是不同后缀的文件。
 	for i, fid := range fileIds {
 		dataFile, err := data.OpenDataFile(db.setup.DirPath, uint32(fid))
 		if err != nil {
@@ -408,7 +393,6 @@ func (db *DB) loadIndexFromDatafile() error {
 	transactionRecords := make(map[uint64][]*data.TransactionRecord)
 	var currentSeqNumber = nonTransactionSeqNo
 
-	// 通过 db 中的 activeFile，inactiveFile获取的对应的 dataFile，而我们则是使用的 OpenDataFile
 	for i, fid := range db.fileIds {
 		var fileId = uint32(fid)
 		var dataFile *data.DataFile
@@ -422,7 +406,6 @@ func (db *DB) loadIndexFromDatafile() error {
 		for {
 			// 考虑到 offset，我们还要获取 logRecord的大小
 			logRecord, size, err := dataFile.ReadLogRecord(offset)
-			// 不能正常返回，但是如果到最后一个文件就是正常情况，其他情况则进行返回
 			if err != nil {
 				// 读取到了最后一个文件，正常情况
 				if err == io.EOF {
@@ -437,13 +420,12 @@ func (db *DB) loadIndexFromDatafile() error {
 				Offset: offset, // 起始值就是 0
 			}
 
-			// TODO: 为什么要拿到事务序列号？
-			// 因为我们需要通过 seq 来得到是否为事务操作，用于后续判断
 			realKey, seq := parseLogRecordKey(logRecord.Key)
 
+			// 非事务操作，直接更新内存索引
 			if seq == nonTransactionSeqNo {
-				// 非事务操作，直接更新内存索引
 				updateIndex(realKey, logRecord.Type, logRecordPos)
+				// 下列属于事务操作范畴
 			} else {
 				// 事务完成，对应的 seq 的数据可以更新到内存索引中。这里应该是读取到最后一个标志事务结束的 logRecord 了（事务提交成功）
 				if logRecord.Type == data.LogRecordTxnFinished {
@@ -451,24 +433,20 @@ func (db *DB) loadIndexFromDatafile() error {
 					for _, txnRecord := range transactionRecords[seq] {
 						updateIndex(txnRecord.Record.Key, txnRecord.Record.Type, txnRecord.Pos)
 					}
-					// 随后将 seq 键值对删除，因此已经更新到了索引之中
 					delete(transactionRecords, seq)
+					// 事务尚未完成，持续添加到 transactionRecords 之中。
 				} else {
-					// 在事务没有完成之前，我们需要将其添加到 transactionRecords 暂存
 					logRecord.Key = realKey
-					// transactionRecords[seq] 对应的是一个数组，数组之中的元素类型是 *data.TransactionRecord
 					transactionRecords[seq] = append(transactionRecords[seq], &data.TransactionRecord{
 						Record: logRecord,
 						Pos:    logRecordPos,
 					})
 				}
 			}
-
-			// 更新事务序列号
+			// 更新事务序列号，更新 currentSeqNumber
 			if seq > currentSeqNumber {
 				currentSeqNumber = seq
 			}
-
 			// 对 offset 进行递增操作
 			offset += size
 		}

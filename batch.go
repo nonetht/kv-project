@@ -93,11 +93,7 @@ func (w *WriteBatch) Commit() error {
 	// 获取当前最新的事务序列号
 	seqNumber := atomic.AddUint64(&w.db.seqNumber, 1)
 
-	// 为什么要创建一个 map 映射呢？(string -> *data.LogRecord)
-	// 作为对索引的缓存，在添加 LogRecord 之后，并不会直接将 pos 返回给我们。
 	positions := make(map[string]*data.LogRecordPos)
-	// 开始向其中写入数据。
-	// TODO: 诶，是否可以添加一个 logRecord，然后立即更新对应索引呢？
 	for _, logRecord := range w.pendingWrites {
 		pos, err := w.db.appendLogRecord(&data.LogRecord{
 			Key:   addSeqToKey(logRecord.Key, seqNumber),

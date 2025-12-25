@@ -23,7 +23,7 @@ func TestWriteBatch_PutAndCommit(t *testing.T) {
 
 	batch := db.NewWriteBatch(DefaultWriteBatchSetup)
 	err := batch.Put([]byte("key-a"), []byte("value-a"))
-	require.NoError(t, err)
+	require.NoError(t, err) // require 和 assert 有什么区别吗？前者 require 是 hard fail，如果断言失败，立即终止
 	assert.Len(t, batch.pendingWrites, 1)
 
 	err = batch.Commit()
