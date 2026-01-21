@@ -94,6 +94,25 @@ func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
 	return encodedBytes, int64(size)
 }
 
+// EncodeLogRecordPos 对位置信息进行编码的方法
+func EncodeLogRecordPos(pos *LogRecordPos) []byte {
+	buf := make([]byte, binary.MaxVarintLen32+binary.MaxVarintLen64)
+	var index = 0
+	index += binary.PutUvarint(buf[index:], uint64(pos.Fid))
+	index += binary.PutVarint(buf[index:], pos.Offset)
+	return buf[:index]
+}
+
+// DecodeLogRecordPos 将字节数组，解析为 logRecordPos 的内容
+func DecodeLogRecordPos(buf []byte) *LogRecordPos {
+	fid, n := binary.Uvarint(buf)
+	offset, _ := binary.Varint(buf[n:])
+	return &LogRecordPos{
+		Fid:    uint32(fid),
+		Offset: offset,
+	}
+}
+
 // 根据字节数组中 Header 信息进行解码，从而拿到 header 头部信息，并且返回 header 长度
 // 是不是其中的 buf 存储的 header 字节数组呢？
 func decodeLogRecordHeader(buf []byte) (*logRecordHeader, int64) {
@@ -108,8 +127,6 @@ func decodeLogRecordHeader(buf []byte) (*logRecordHeader, int64) {
 
 	var index = 5
 	// 取出 keySize，以及valueSize
-	// 但是我还是不理解，就是 size 都是变长的，为什么可以直接读取出 keySize 呢？
-	// 其实就是，内存之中的字节有8位，最高位0,1代表不同意思（1表示数据还没完，继续读下一个字节；0表示该数字最后一个字节，读完就停下。）
 	keySize, n := binary.Varint(buf[index:])
 	header.keySize = uint32(keySize) // 给结构体之中的 keySize 字段赋值
 	index += n
