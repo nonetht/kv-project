@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"sort"
+	"strconv"
 )
 
 const mergeDirName = "-merge"
@@ -46,6 +47,8 @@ func (db *DB) Merge() error {
 		return err
 	}
 
+	nonMergeFileId := db.activeFile.FileId
+
 	// 取出所有需要 merge 的文件
 	var mergeFiles []*data.DataFile
 	for _, file := range db.inactiveFile {
@@ -68,6 +71,7 @@ func (db *DB) Merge() error {
 			return err
 		}
 	}
+
 	// 新建一个 merge path 目录，
 	if err := os.MkdirAll(mergePath, os.ModePerm); err != nil {
 		return err
@@ -89,8 +93,7 @@ func (db *DB) Merge() error {
 		return err
 	}
 
-	// 遍历处理每个数据文件
-	// 说实在的，写得我感觉恶心，太臃肿了这部分。
+	// 遍历处理每个数据文件，然后获取其中存储的 logRecord，比较 logRecordPos 以及
 	for _, dataFile := range mergeFiles {
 		var offset int64 = 0
 		for {
@@ -101,12 +104,13 @@ func (db *DB) Merge() error {
 				}
 				return err
 			}
+			// 就因为改动了 Put 方法，导致后续都要执行 parseLogRecord 方法
 			realKey, _ := parseLogRecordKey(logRecord.Key)
 			logRecordPos := db.index.Get(realKey)
 			// 和内存中的索引位置进行比较，如果有效则重写。比较两个：Fid, offset
 			if logRecordPos != nil && logRecordPos.Fid == dataFile.FileId && logRecordPos.Offset == offset {
-				// 清除事务标记
-				logRecord.Key = addSeqToKey(realKey, nonTransactionSeqNo) //
+				// 清除事务标记，因为这些都是有效的数据
+				logRecord.Key = addSeqToKey(realKey, nonTransactionSeqNo)
 				pos, err := mergeDB.appendLogRecord(logRecord)
 				if err != nil {
 					return err
@@ -130,6 +134,26 @@ func (db *DB) Merge() error {
 	}
 
 	// 新增一个标识 merge 完成的文件。
+	mergeFinishedFile, err := data.OpenMergeFinishedFile(mergePath)
+	if err != nil {
+		return err
+	}
+
+	mergeFinRec := &data.LogRecord{
+		Key:   []byte("merge already finshed"),
+		Value: []byte(strconv.Itoa(int(nonMergeFileId))),
+	}
+
+	encRecord, _ := data.EncodeLogRecord(mergeFinRec)
+	if err := mergeFinishedFile.Write(encRecord); err != nil {
+		return err
+	}
+
+	if err := mergeFinishedFile.Sync(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // 比如说我们当前目录是：/tmp/bitcask
