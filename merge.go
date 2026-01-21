@@ -33,15 +33,12 @@ func (db *DB) Merge() error {
 	}()
 
 	// 关闭当前活跃文件，打开一个新的活跃文件
-	// e.g.比如说当前我们有三个文件：file0, file1, file2。此时我们应该关闭当前活跃文件 file2，随后打开一个新的文件 file3.
 	if err := db.activeFile.Sync(); err != nil {
 		db.mu.Unlock()
 		return err
 	}
 
-	// 将当前活跃文件转换为旧的文件
 	db.inactiveFile[db.activeFile.FileId] = db.activeFile
-	// 打开新的活跃文件
 	if err := db.initActiveFile(); err != nil {
 		db.mu.Unlock()
 		return err
@@ -49,7 +46,7 @@ func (db *DB) Merge() error {
 
 	nonMergeFileId := db.activeFile.FileId
 
-	// 取出所有需要 merge 的文件
+	// 取出所有需要 merge 的文件，并存放到 mergeFiles 切片之中
 	var mergeFiles []*data.DataFile
 	for _, file := range db.inactiveFile {
 		mergeFiles = append(mergeFiles, file)
@@ -64,7 +61,6 @@ func (db *DB) Merge() error {
 	})
 
 	mergePath := db.getMergePath()
-	// TODO: 我就很奇怪，为什么不能是在 merge 结束的时候将其删除掉呢？
 	// 如果之前存在目录，说明发生过 merge，将其删除掉。
 	if _, err := os.Stat(mergePath); err == nil {
 		if err := os.RemoveAll(mergePath); err != nil {
@@ -107,7 +103,7 @@ func (db *DB) Merge() error {
 			// 就因为改动了 Put 方法，导致后续都要执行 parseLogRecord 方法
 			realKey, _ := parseLogRecordKey(logRecord.Key)
 			logRecordPos := db.index.Get(realKey)
-			// 和内存中的索引位置进行比较，如果有效则重写。比较两个：Fid, offset
+			// 通过两个字段：Fid，offset 来同内存中的索引位置进行比较，如果有效则重写。
 			if logRecordPos != nil && logRecordPos.Fid == dataFile.FileId && logRecordPos.Offset == offset {
 				// 清除事务标记，因为这些都是有效的数据
 				logRecord.Key = addSeqToKey(realKey, nonTransactionSeqNo)
@@ -133,23 +129,26 @@ func (db *DB) Merge() error {
 		return err
 	}
 
-	// 新增一个标识 merge 完成的文件。
-	mergeFinishedFile, err := data.OpenMergeFinishedFile(mergePath)
+	// 新增一个标识 merge 完成的文件 -- mergeFinFile
+	mergeFinFile, err := data.OpenMergeFinishedFile(mergePath)
 	if err != nil {
 		return err
 	}
 
+	// ⚠️其中的 Value 部分，实际上是 nonMergeFileId，本质上是最新的 FileId
 	mergeFinRec := &data.LogRecord{
-		Key:   []byte("merge already finshed"),
+		Key:   []byte("merge already finished"),
 		Value: []byte(strconv.Itoa(int(nonMergeFileId))),
 	}
 
+	// 将 mergeFinRec 进行编码，编入后续写入到文件 -- mergeFinFile
 	encRecord, _ := data.EncodeLogRecord(mergeFinRec)
-	if err := mergeFinishedFile.Write(encRecord); err != nil {
+	if err := mergeFinFile.Write(encRecord); err != nil {
 		return err
 	}
 
-	if err := mergeFinishedFile.Sync(); err != nil {
+	// 写入之后，刷写到磁盘上，保证持久性
+	if err := mergeFinFile.Sync(); err != nil {
 		return err
 	}
 
@@ -166,4 +165,54 @@ func (db *DB) getMergePath() string {
 	base := path.Base(db.setup.DirPath)
 
 	return path.Join(Dir, base+mergeDirName)
+}
+
+func (db *DB) loadMergeFiles() error {
+	mergePath := db.getMergePath()
+	// mergePath 路径不存在的话，直接返回
+	if _, err := os.Stat(mergePath); os.IsNotExist(err) {
+		return nil
+	}
+
+	defer func() {
+		_ = os.RemoveAll(mergePath)
+	}()
+
+	dirEntries, err := os.ReadDir(mergePath)
+	if err != nil {
+		return err
+	}
+
+	// 寻找查看 merge 是否完成的文件
+	var isMergeFinished bool
+	for _, dirEntry := range dirEntries {
+		if dirEntry.Name() == mergeDirName {
+			isMergeFinished = true
+		}
+	}
+
+	// 没有 merge 完成的表示文件，则直接返回
+	if !isMergeFinished {
+		return nil
+	}
+
+}
+
+func (db *DB) getNonMergeFileId(dirPath string) (uint64, error) {
+	mergeFinFile, err := data.OpenMergeFinishedFile(dirPath)
+	if err != nil {
+		return 0, err
+	}
+
+	rec, _, err := mergeFinFile.ReadLogRecord(0)
+	if err != nil {
+		return 0, err
+	}
+
+	nonMergeFileId, err := strconv.Atoi(string(rec.Value))
+	if err != nil {
+		return 0, err
+	}
+
+	return uint64(nonMergeFileId), nil
 }
