@@ -33,7 +33,7 @@ func (bt *BTree) Put(key []byte, pos *data.LogRecordPos) bool {
 
 	// ReplaceOrInsert 函数期待的是一个**实现了 btree.Item 接口**的变量
 	bt.btree.ReplaceOrInsert(it) // 实际上装入的是 &Item类型的变量
-	return true                  // 肯定就是always返回true
+	return true
 }
 
 // Get 通过key获取对应的索引信息
@@ -92,7 +92,7 @@ func newBTreeIterator(tree *btree.BTree, reverse bool) *btreeIterator {
 	// 将所有的数据存放到数组中，但是其中没有循环，如何实现将*所有*数据放入的呢？
 	// saveValues 是一个函数！后续的 Descend/Ascend 函数会不断调用 saveValues 函数
 	saveValues := func(it btree.Item) bool {
-		values[idx] = it.(*Item) // ?
+		values[idx] = it.(*Item)
 		idx++
 		return true // 返回 false 会终止遍历，但是我也没有执行遍历...
 	}
@@ -118,7 +118,6 @@ func (b *btreeIterator) Rewind() {
 }
 
 // Seek 根据传入的 key 查找到第一个大于等于的 key 的*索引*。此外，Seek 函数没有返回值
-// TODO: 没有看懂 Seek 函数的内容，我也很敬佩作者是从哪里找到的这些函数 —— sort.Search
 func (b *btreeIterator) Seek(key []byte) {
 	if b.reverse {
 		b.currIndex = sort.Search(len(b.values), func(i int) bool {

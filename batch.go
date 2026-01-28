@@ -47,7 +47,7 @@ func (w *WriteBatch) Put(key []byte, value []byte) error {
 	return nil
 }
 
-// Delete 删除对应的数据，并且考虑两个case：1. 数据不存在；2. 数据存在于 pendingWrites 之中
+// Delete 删除对应的数据，但是我的逻辑和作者写的稍有不同，应该按照 @roseduan 的为主
 func (w *WriteBatch) Delete(key []byte) error {
 	if len(key) == 0 {
 		return ErrKeyIsEmpty
@@ -56,18 +56,14 @@ func (w *WriteBatch) Delete(key []byte) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	// 对应case2，待删除数据在 pendingWrites 之中；同样，如果不存在则无事发生。
-	if w.pendingWrites[string(key)] != nil {
-		delete(w.pendingWrites, string(key)) // 从 pendingWrites 之中，将 string(key) 删除掉
-		return nil
-	}
-
-	// 对应case1，待删除数据不存在；但是不能放在 case2 前面，万一其中的待删除没有在索引之中找到，但是可以在 pendingWrites 中找到呢？
+	// TODO: deal with corner cases；这是 @roseduan 的实现，但是我认为有一种情况没有考虑到。
 	if pos := w.db.index.Get(key); pos == nil {
+		if w.pendingWrites[string(key)] != nil {
+			delete(w.pendingWrites, string(key))
+		}
 		return nil
 	}
 
-	// 应该是将待删除的写入到 pendingWrites 之中，但是忽略其中 Value 内容
 	logRecord := &data.LogRecord{
 		Key:  key,
 		Type: data.LogRecordDeleted,
@@ -90,10 +86,14 @@ func (w *WriteBatch) Commit() error {
 		return ErrExceedMaxBatchNum
 	}
 
+	w.db.mu.Lock()
+	defer w.db.mu.Unlock()
+
 	// 获取当前最新的事务序列号
 	seqNumber := atomic.AddUint64(&w.db.seqNumber, 1)
 
 	positions := make(map[string]*data.LogRecordPos)
+	// 遍历 pendingWrite，将其中的 logRecord 全部写入
 	for _, logRecord := range w.pendingWrites {
 		pos, err := w.db.appendLogRecord(&data.LogRecord{
 			Key:   addSeqToKey(logRecord.Key, seqNumber),
@@ -124,6 +124,7 @@ func (w *WriteBatch) Commit() error {
 		}
 	}
 
+	// 更新索引：遍历 positions，将 pos 全部写入到索引
 	for _, record := range w.pendingWrites {
 		pos := positions[string(record.Key)]
 		if record.Type == data.LogRecordNormal {
@@ -134,6 +135,7 @@ func (w *WriteBatch) Commit() error {
 		}
 	}
 
+	// pendingWrite 清空
 	w.pendingWrites = make(map[string]*data.LogRecord)
 	return nil
 }

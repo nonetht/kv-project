@@ -14,7 +14,7 @@ const mergeDirName = "-merge"
 
 // Merge 清理无效数据，并生成 Hint 文件
 func (db *DB) Merge() error {
-	// 数据库为空，直接返回
+	// 不存在活跃文件，直接返回
 	if db.activeFile == nil {
 		return nil
 	}
@@ -101,7 +101,7 @@ func (db *DB) Merge() error {
 				}
 				return err
 			}
-			// 就因为改动了 Put 方法，导致后续都要执行 parseLogRecord 方法
+			// 就因为改动了 Put 方法，导致后续都要执行 parseLogRecord 方法；所以感觉写得很难受
 			realKey, _ := parseLogRecordKey(logRecord.Key)
 			logRecordPos := db.index.Get(realKey)
 			// 通过两个字段：Fid，offset 来同内存中的索引位置进行比较，如果有效则重写。
@@ -160,11 +160,9 @@ func (db *DB) Merge() error {
 // 那么我们在其父目录之上，增加一个新的目录：/tmp/bitcask-merge
 func (db *DB) getMergePath() string {
 	// Dir 表示拿到父目录
-	// Clean 表示清楚末尾的斜杠
-	Dir := path.Dir(path.Clean(db.setup.DirPath))
+	Dir := path.Dir(path.Clean(db.setup.DirPath)) // 感觉不加上 Clean 方法也是可以的。
 	// 拿到文件夹的名称
 	base := path.Base(db.setup.DirPath)
-
 	return path.Join(Dir, base+mergeDirName)
 }
 

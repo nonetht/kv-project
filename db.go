@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -47,19 +48,23 @@ func Open(setup Setup) (*DB, error) {
 		index:        index.NewIndexer(setup.IndexType),
 	}
 
+	// 首先要加载 merge 文件
+	if err := db.loadMergeFiles(); err != nil {
+		return nil, err
+	}
+
 	// 加载数据文件
 	if err := db.loadDataFile(); err != nil {
 		return nil, err
 	}
 
 	// 随后开始准备构建索引
-	/*
-		务必从小到大来遍历文件的 id，根据 id 找到对应数据文件，可以写一个 for循环。
-		并且定义 offset 变量，表示读取到当前文件哪个位置。直接调用 ReadLogRecord 方法，拿到 LogRecord 即可
-		随后根据当前文件遍历的 id，以及offset，构建出内存索引信息 LogRecordPos，并将其存储到内存索引之中
-	*/
+	// 从 hint 索引文件中加载索引
+	if err := db.loadIndexFromHintFile(); err != nil {
+		return nil, err
+	}
 
-	// 1. 从数据文件中，加载索引
+	// 从数据文件中加载索引
 	if err := db.loadIndexFromDatafile(); err != nil {
 		return nil, err
 	}
@@ -214,13 +219,11 @@ func (db *DB) Fold(fn func(key []byte, value []byte) bool) error {
 
 // Close 关闭数据库，清理并释放相关资源
 func (db *DB) Close() error {
-	if db == nil {
-		return nil
-	}
-
 	// 还是要有加锁、解锁的内容
 	db.mu.Lock()
 	defer db.mu.Unlock()
+
+	// TODO: 在关闭之前，是否还要执行一次 Sync 吗？
 
 	// 关闭当前活跃文件
 	if db.activeFile != nil {
@@ -376,6 +379,20 @@ func (db *DB) loadIndexFromDatafile() error {
 		return nil
 	}
 
+	// 查看是否发生过 merge；以及未参与 merge 的文件 id。
+	var hasMerge bool
+	var nonMergeFileId uint32
+	mergeFinFileName := filepath.Join(db.setup.DirPath, data.MergeFinished)
+
+	if _, err := os.Stat(mergeFinFileName); err == nil {
+		fid, err := db.getNonMergeFileId(db.setup.DirPath)
+		if err != nil {
+			return err
+		}
+		hasMerge = true
+		nonMergeFileId = fid
+	}
+
 	updateIndex := func(key []byte, typ data.LogRecordType, pos *data.LogRecordPos) {
 		var ok bool // 定义 ok 变量，对结果进行检测
 		// 如果为删除类型的话，则执行删除操作。即从 db.index 将其删除
@@ -393,8 +410,15 @@ func (db *DB) loadIndexFromDatafile() error {
 	transactionRecords := make(map[uint64][]*data.TransactionRecord)
 	var currentSeqNumber = nonTransactionSeqNo
 
+	// 遍历 fileIds，获取对应的 dataFile
 	for i, fid := range db.fileIds {
 		var fileId = uint32(fid)
+
+		// 如果比最近参与 merge 的文件 id 要小，则...
+		if hasMerge && fileId < nonMergeFileId {
+			continue
+		}
+
 		var dataFile *data.DataFile
 		if fileId == db.activeFile.FileId {
 			dataFile = db.activeFile
@@ -404,7 +428,7 @@ func (db *DB) loadIndexFromDatafile() error {
 
 		var offset int64 = 0
 		for {
-			// 考虑到 offset，我们还要获取 logRecord的大小
+			// 通过 dataFile，我们还要获取 logRecord，及其对应大小
 			logRecord, size, err := dataFile.ReadLogRecord(offset)
 			if err != nil {
 				// 读取到了最后一个文件，正常情况
@@ -420,6 +444,7 @@ func (db *DB) loadIndexFromDatafile() error {
 				Offset: offset, // 起始值就是 0
 			}
 
+			// 将 key 进行解析，获取 realKey 以及事务序列号
 			realKey, seq := parseLogRecordKey(logRecord.Key)
 
 			// 非事务操作，直接更新内存索引
