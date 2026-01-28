@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strconv"
 )
@@ -185,10 +186,12 @@ func (db *DB) loadMergeFiles() error {
 
 	// 寻找查看 merge 是否完成的文件
 	var isMergeFinished bool
+	var mergeFileNames []string
 	for _, dirEntry := range dirEntries {
 		if dirEntry.Name() == mergeDirName {
 			isMergeFinished = true
 		}
+		mergeFileNames = append(mergeFileNames, dirEntry.Name())
 	}
 
 	// 没有 merge 完成的表示文件，则直接返回
@@ -196,9 +199,34 @@ func (db *DB) loadMergeFiles() error {
 		return nil
 	}
 
+	nonMergeFileId, err := db.getNonMergeFileId(mergePath)
+	if err != nil {
+		return err
+	}
+
+	// 删除旧数据文件
+	var fileId uint32 = 0
+	for ; fileId < nonMergeFileId; fileId++ {
+		fileName := data.GetDataFileName(db.setup.DirPath, fileId)
+		if _, err := os.Stat(fileName); os.IsNotExist(err) {
+			if err := os.Remove(fileName); err != nil {
+				return err
+			}
+		}
+	}
+
+	// 将新的数据文件移动到目录中；其实移动方式，就是将文件夹名称进行了更改罢了。
+	for _, fileName := range mergeFileNames {
+		srcPath := filepath.Join(mergePath, fileName)
+		destPath := filepath.Join(db.setup.DirPath, fileName)
+		if err := os.Rename(srcPath, destPath); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func (db *DB) getNonMergeFileId(dirPath string) (uint64, error) {
+func (db *DB) getNonMergeFileId(dirPath string) (uint32, error) {
 	mergeFinFile, err := data.OpenMergeFinishedFile(dirPath)
 	if err != nil {
 		return 0, err
@@ -214,5 +242,36 @@ func (db *DB) getNonMergeFileId(dirPath string) (uint64, error) {
 		return 0, err
 	}
 
-	return uint64(nonMergeFileId), nil
+	return uint32(nonMergeFileId), nil
+}
+
+// 从 Hint 文件中加载索引
+func (db *DB) loadIndexFromHintFile() error {
+	hintFileName := filepath.Join(db.setup.DirPath, data.HintFileName)
+	if _, err := os.Stat(hintFileName); os.IsNotExist(err) {
+		return nil
+	}
+
+	// 打开 hint 索引文件
+	hintFile, err := data.OpenHintFile(hintFileName)
+	if err != nil {
+		return err
+	}
+
+	// 读取文件中的索引
+	var offset int64 = 0
+	for {
+		rec, size, err := hintFile.ReadLogRecord(offset)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+		// 解码拿到实际位置索引信息
+		pos := data.DecodeLogRecordPos(rec.Value)
+		db.index.Put(rec.Key, pos)
+		offset += size
+	}
+	return nil
 }
