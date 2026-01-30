@@ -16,6 +16,7 @@ const (
 	FileNameSuffix = ".data"
 	HintFileName   = "hint-index"
 	MergeFinished  = "merge-finished"
+	SeqNoFileName  = "seq-no"
 )
 
 // DataFile 使用结构体来定义数据文件
@@ -52,14 +53,19 @@ func OpenHintFile(dirPath string) (*DataFile, error) {
 	return newDataFile(fileName, 0)
 }
 
-// OpenMergeFinishedFile 写入一个文件，标识 merge 操作已完成。
+// OpenSeqNoFile 存储事务序列号的文件
+func OpenSeqNoFile(dirPath string) (*DataFile, error) {
+	fileName := filepath.Join(dirPath, SeqNoFileName)
+	return newDataFile(fileName, 0)
+}
+
 func OpenMergeFinishedFile(dirPath string) (*DataFile, error) {
 	fileName := filepath.Join(dirPath, MergeFinished)
 	return newDataFile(fileName, 0)
 }
 
 func GetDataFileName(dirPath string, fileId uint32) string {
-	fileName := filepath.Join(dirPath, fmt.Sprintf("#{fileId}")+FileNameSuffix) // ?
+	fileName := filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+FileNameSuffix) // ?
 	return fileName
 }
 
@@ -128,7 +134,7 @@ func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 	logRecord.Key = key
 	logRecord.Value = value
 
-	crc := getLogRecordCRC(logRecord, buf[4:])
+	crc := getLogRecordCRC(logRecord, buf[4:headerSize])
 	if crc != header.crc {
 		return nil, 0, ErrInvalidCRC
 	}

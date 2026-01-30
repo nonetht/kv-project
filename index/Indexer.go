@@ -23,12 +23,12 @@ const (
 	ART
 )
 
-func NewIndexer(typ IndexType) Indexer {
+func NewIndexer(typ IndexType, dirPath string, sync bool) Indexer {
 	switch typ {
 	case Btree:
 		return NewBTree()
 	case ART:
-		return nil
+		return NewART()
 	default:
 		panic("unknown index type")
 	}

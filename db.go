@@ -13,6 +13,8 @@ import (
 	"sync"
 )
 
+const seqNoKey = "seq.no"
+
 // DB 存储面向用户的操作接口
 type DB struct {
 	setup        Setup
@@ -45,7 +47,7 @@ func Open(setup Setup) (*DB, error) {
 		mu:           new(sync.RWMutex),
 		activeFile:   nil,
 		inactiveFile: make(map[uint32]*data.DataFile),
-		index:        index.NewIndexer(setup.IndexType),
+		index:        index.NewIndexer(setup.IndexType, setup.DirPath, setup.SyncWrites),
 	}
 
 	// 首先要加载 merge 文件
@@ -58,7 +60,6 @@ func Open(setup Setup) (*DB, error) {
 		return nil, err
 	}
 
-	// 随后开始准备构建索引
 	// 从 hint 索引文件中加载索引
 	if err := db.loadIndexFromHintFile(); err != nil {
 		return nil, err
@@ -68,6 +69,9 @@ func Open(setup Setup) (*DB, error) {
 	if err := db.loadIndexFromDatafile(); err != nil {
 		return nil, err
 	}
+
+	// 取出当前事务序列号
+
 	return db, nil
 }
 
@@ -219,17 +223,38 @@ func (db *DB) Fold(fn func(key []byte, value []byte) bool) error {
 
 // Close 关闭数据库，清理并释放相关资源
 func (db *DB) Close() error {
+	if db.activeFile == nil {
+		return nil
+	}
+
 	// 还是要有加锁、解锁的内容
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
 	// TODO: 在关闭之前，是否还要执行一次 Sync 吗？
 
-	// 关闭当前活跃文件
-	if db.activeFile != nil {
-		if err := db.activeFile.Close(); err != nil {
-			return err
-		}
+	// TODO: 保存当前事务序列号；关键不知道是用来干什么呢
+	seqNoFile, err := data.OpenSeqNoFile(db.setup.DirPath)
+	if err != nil {
+		return err
+	}
+
+	record := &data.LogRecord{
+		Key:   []byte(seqNoKey),
+		Value: []byte(strconv.FormatUint(db.seqNumber, 10)),
+	}
+	encRecord, _ := data.EncodeLogRecord(record)
+	if err = seqNoFile.Write(encRecord); err != nil {
+		return err
+	}
+
+	// 执行 Sync 保证吃就行
+	if err = seqNoFile.Sync(); err != nil {
+		return err
+	}
+
+	if err := db.activeFile.Close(); err != nil {
+		return err
 	}
 
 	// 不活跃文件如何关闭呢？inactiveFile 的类型是 map[uint32]*data.DataFile。即 uint32 - *data.DataFile
@@ -497,5 +522,26 @@ func checkOptions(setup Setup) error {
 	if setup.DataFileSize <= 0 {
 		return errors.New("database data file size must be greater than 0")
 	}
+	return nil
+}
+
+func (db *DB) loadSeqNo() error {
+	fileName := filepath.Join(db.setup.DirPath, data.SeqNoFileName)
+	if _, err := os.Stat(fileName); os.IsNotExist(err) {
+		return nil
+	}
+
+	seqNoFile, err := data.OpenSeqNoFile(db.setup.DirPath)
+	if err != nil {
+		return err
+	}
+
+	record, _, err := seqNoFile.ReadLogRecord(0)
+	seqNo, err := strconv.ParseUint(string(record.Value), 10, 64)
+	if err != nil {
+		return err
+	}
+
+	db.seqNumber = seqNo
 	return nil
 }

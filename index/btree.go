@@ -137,7 +137,7 @@ func (b *btreeIterator) Next() {
 
 // Valid 判断当前指针是否超过了数组长度
 func (b *btreeIterator) Valid() bool {
-	return b.currIndex < len(b.values)
+	return b.currIndex >= 0 && b.currIndex < len(b.values)
 }
 
 func (b *btreeIterator) Key() []byte {
